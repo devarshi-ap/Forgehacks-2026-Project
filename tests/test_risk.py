@@ -101,4 +101,63 @@ def test_n_large_returns_all_rated_hazards(nri):
 def test_result_shape(nri):
     row = risk.find_county_row(nri, "04013", None, None)
     first = risk.rank_hazards(row)[0]
-    assert first == {"haz
+    assert first == {"hazard": "heat", "score": 92.0, "rating": "Very High"}
+
+
+def test_missing_hazard_column_is_skipped():
+    # e.g. an older CSV downloaded before WFIR was added
+    row = pd.Series({"HRCN_RISKS": 80.0, "HRCN_RISKR": "Relatively High"})
+    assert risk.rank_hazards(row) == [{"hazard": "hurricane", "score": 80.0, "rating": "Relatively High"}]
+
+
+@pytest.mark.skipif("RFLD" not in risk.HAZARD_CODES["flood"], reason="RFLD support removed from risk.py")
+def test_handles_older_rfld_column_name():
+    row = pd.Series({"RFLD_RISKS": 75.0, "RFLD_RISKR": "Relatively High"})
+    assert risk.rank_hazards(row) == [{"hazard": "flood", "score": 75.0, "rating": "Relatively High"}]
+
+
+# ---- find_county_row ------------------------------------------------------
+
+def test_fips_lookup_pads_leading_zero(nri):
+    assert risk.find_county_row(nri, "06037", None, None)["COUNTY"] == "Los Angeles"
+
+
+def test_falls_back_to_county_name(nri):
+    row = risk.find_county_row(nri, None, "Arizona", "Maricopa County")
+    assert row["STCOFIPS"] == "04013"
+
+
+def test_unknown_county_raises(nri):
+    with pytest.raises(risk.LocationNotFound):
+        risk.find_county_row(nri, "99999", "Nowhere", "Nothing")
+
+
+# ---- get_top_risks (end to end, with faked network) -----------------------
+
+def test_get_top_risks_end_to_end(monkeypatch):
+    risk.load_nri.cache_clear()
+    fake_geocoder(
+        monkeypatch,
+        {"name": "Miami", "lat": 25.77, "lon": -80.19, "state_name": "Florida", "county_name": "Miami-Dade"},
+        fips="12086",
+    )
+    result = risk.get_top_risks("Miami, FL", nri_path=SAMPLE)
+    assert result["location"] == {"name": "Miami", "county": "Miami-Dade", "state": "FL", "fips": "12086"}
+    assert [r["hazard"] for r in result["risks"]] == ["hurricane", "flood", "heat"]
+
+
+def test_get_top_risks_when_fcc_is_down(monkeypatch):
+    risk.load_nri.cache_clear()
+    fake_geocoder(
+        monkeypatch,
+        {"name": "Phoenix", "lat": 33.45, "lon": -112.07, "state_name": "Arizona", "county_name": "Maricopa"},
+        fips=None,
+    )
+    result = risk.get_top_risks("Phoenix, AZ", nri_path=SAMPLE)
+    assert result["location"]["county"] == "Maricopa"
+    assert [r["hazard"] for r in result["risks"]] == ["heat", "wildfire", "flood"]
+
+
+def test_empty_location_raises():
+    with pytest.raises(risk.LocationNotFound):
+        risk.geocode("   ")
