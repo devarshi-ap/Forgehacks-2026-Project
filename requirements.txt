@@ -1,0 +1,7 @@
+pandas
+requests
+pydantic
+openai
+streamlit
+python-dotenv
+pytest
