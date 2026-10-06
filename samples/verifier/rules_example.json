@@ -1,0 +1,13 @@
+{
+  "_note": "EXAMPLE Module 3 output for testing Module 5 alone: flood + powered wheelchair + no backup power. Sources are placeholders.",
+  "must_do": [
+    { "rule_id": "PWR-WHEELCHAIR", "action": "Arrange backup charging or a backup battery for your powered wheelchair.", "source": "EXAMPLE source (replace with an official guide)" },
+    { "rule_id": "EVAC-HELP", "action": "Agree in advance who will help you leave your building if the lift stops.", "source": "EXAMPLE source (replace with an official guide)" },
+    { "rule_id": "FLOOD-HIGH-GROUND", "action": "Know where you can reach higher ground or a higher floor safely.", "source": "EXAMPLE source (replace with an official guide)" }
+  ],
+  "never_do": ["go to the basement", "wait for the water to rise", "drive through flood water"],
+  "gaps": [
+    { "message": "No backup charging for your wheelchair", "fix": "Get a backup battery or find a place to recharge.", "priority": 1 },
+    { "message": "No agreed way to leave without the lift", "fix": "Agree a helper and a backup contact.", "priority": 2 }
+  ]
+}
