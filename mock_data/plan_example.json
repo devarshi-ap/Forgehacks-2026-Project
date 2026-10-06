@@ -1,0 +1,72 @@
+{
+  "_note": "EXAMPLE DATA for building the UI. Kesava's AI 3 (Plan writer) + Verifier will return this same shape. Check every source link before the demo video.",
+  "is_demo": true,
+  "location": "New York City, United States",
+  "top_risks": [
+    { "name": "Flooding", "icon": "waves", "why": "Flooding may block building access." },
+    { "name": "Earthquakes", "icon": "activity", "why": "Shaking may stop your lift." },
+    { "name": "Extreme heat", "icon": "thermometer", "why": "Living alone means fewer check-ins." }
+  ],
+  "summary": "You live alone on the 3rd floor and use a powered wheelchair. Your lift needs electricity, and you haven’t arranged help yet. Start by agreeing an accessible way to leave, a backup-power plan, and a cool place you can reach.",
+  "gaps": [
+    {
+      "rank": 1,
+      "title": "No agreed way to leave without the lift",
+      "why": "You live alone on the 3rd floor. A power cut could stop the lift.",
+      "fix": "Talk with your building manager and a trusted person about an accessible evacuation plan. Confirm who can help and a backup contact.",
+      "source_ids": ["S1"]
+    },
+    {
+      "rank": 2,
+      "title": "Your chair depends on power",
+      "why": "Your powered wheelchair needs charging, but no backup plan is described.",
+      "fix": "Ask your chair supplier about safe backup power and charging options. Write down your equipment needs and key contacts.",
+      "source_ids": ["S1"]
+    },
+    {
+      "rank": 3,
+      "title": "A cool, accessible place is not identified",
+      "why": "Heat and a power cut could make staying home difficult.",
+      "fix": "Find an accessible cool place and check transport options in advance. Ask NYC services about current cooling-centre availability.",
+      "source_ids": ["S4", "S6"]
+    }
+  ],
+  "checklist": [
+    { "id": "c1", "when": "This week", "step": "Save official alert links and emergency contacts", "source_ids": ["S6", "S7"] },
+    { "id": "c2", "when": "This week", "step": "Agree an accessible evacuation and backup-power plan", "source_ids": ["S1"] },
+    { "id": "c3", "when": "When a warning is issued", "step": "Check official instructions and contact your support person", "source_ids": ["S6", "S7"] },
+    { "id": "c4", "when": "When a warning is issued", "step": "Charge your chair and phone; gather essential supplies", "source_ids": ["S1", "S5"] },
+    { "id": "c5", "when": "During the event", "step": "Follow local instructions and use your agreed support plan", "source_ids": ["S6"] },
+    { "id": "c6", "when": "During the event", "step": "In immediate danger, call 911 and explain your access needs", "source_ids": ["S1"] }
+  ],
+  "comparison": [
+    {
+      "topic": "Leaving home",
+      "generic": "Know your evacuation route.",
+      "personalised": "Agree how to leave your 3rd-floor home if the lift loses power. Include a trusted helper and backup contact.",
+      "source_ids": ["S1"]
+    },
+    {
+      "topic": "Power and supplies",
+      "generic": "Keep an emergency supply kit.",
+      "personalised": "Include your chair’s charging needs, equipment information, medicines and support contacts in your plan.",
+      "source_ids": ["S1", "S5"]
+    },
+    {
+      "topic": "Extreme heat",
+      "generic": "Go somewhere cool.",
+      "personalised": "Identify a cool place you can enter with your wheelchair, and check how you would get there without the lift.",
+      "source_ids": ["S4"]
+    }
+  ],
+  "sources": [
+    { "id": "S1", "publisher": "Ready.gov", "title": "People with disabilities", "url": "https://www.ready.gov/disability" },
+    { "id": "S2", "publisher": "Ready.gov", "title": "Floods", "url": "https://www.ready.gov/floods" },
+    { "id": "S3", "publisher": "Ready.gov", "title": "Earthquakes", "url": "https://www.ready.gov/earthquakes" },
+    { "id": "S4", "publisher": "Ready.gov", "title": "Extreme heat", "url": "https://www.ready.gov/heat" },
+    { "id": "S5", "publisher": "Ready.gov", "title": "Build a kit", "url": "https://www.ready.gov/kit" },
+    { "id": "S6", "publisher": "NYC Emergency Management", "title": "Ready New York", "url": "https://www.nyc.gov/ready" },
+    { "id": "S7", "publisher": "National Weather Service", "title": "New York weather alerts", "url": "https://www.weather.gov/okx/" }
+  ],
+  "verifier": { "status": "pass", "note": "" }
+}
