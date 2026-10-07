@@ -1,0 +1,41 @@
+{
+  "profile": {
+    "age": 23,
+    "lives_alone": true,
+    "home": {
+      "type": "apartment",
+      "floor": 3,
+      "has_lift": null,
+      "lift_needs_electricity": null
+    },
+    "mobility": {
+      "uses_wheelchair": true,
+      "wheelchair_type": null
+    },
+    "medical_equipment": [],
+    "has_car": false,
+    "helper_nearby": null
+  },
+  "followups": [
+    {
+      "id": "lift_presence",
+      "question": "Does your building have a lift (elevator)?",
+      "helper": "lift_presence",
+      "options": [
+        "yes",
+        "no",
+        "not sure"
+      ]
+    },
+    {
+      "id": "wheelchair_type",
+      "question": "What type of wheelchair do you use? (powered, manual, prefer not to say)",
+      "helper": "wheelchair_type",
+      "options": [
+        "powered",
+        "manual",
+        "prefer not to say"
+      ]
+    }
+  ]
+}
