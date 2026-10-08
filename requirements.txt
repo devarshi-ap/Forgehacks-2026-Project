@@ -1,7 +1,11 @@
-pandas
-requests
-pydantic
-openai
-streamlit
-python-dotenv
-pytest
+   pandas
+   requests
+   pydantic
+   openai
+   streamlit
+   python-dotenv
+   pytest
+   fastapi
+   uvicorn[standard]
+   httpx
+   groq
