@@ -1,0 +1,5 @@
+STCOFIPS,STATE,STATEABBRV,COUNTY,RISK_SCORE,RISK_RATNG,HRCN_RISKS,HRCN_RISKR,IFLD_RISKS,IFLD_RISKR,CFLD_RISKS,CFLD_RISKR,HWAV_RISKS,HWAV_RISKR,ERQK_RISKS,ERQK_RISKR,LNDS_RISKS,LNDS_RISKR,WFIR_RISKS,WFIR_RISKR
+12086,Florida,FL,Miami-Dade,99.0,Very High,99.5,Very High,80.0,Relatively High,98.0,Very High,60.0,Relatively Moderate,20.0,Very Low,10.0,Very Low,15.0,Very Low
+06037,California,CA,Los Angeles,99.9,Very High,,Not Applicable,90.0,Very High,85.0,Relatively High,70.0,Relatively Moderate,99.9,Very High,95.0,Very High,98.0,Very High
+04013,Arizona,AZ,Maricopa,95.0,Very High,,Not Applicable,70.0,Relatively Moderate,,Not Applicable,92.0,Very High,40.0,Relatively Low,30.0,Very Low,75.0,Relatively High
+22071,Louisiana,LA,Orleans,97.0,Very High,98.0,Very High,85.0,Relatively High,96.0,Very High,30.0,Very Low,5.0,Very Low,,No Rating,,No Rating
