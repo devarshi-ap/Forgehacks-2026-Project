@@ -65,9 +65,16 @@ def screen_intake():
             st.error("Please fill in your city, your country and a short description.")
         else:
             st.session_state.update(saved_city=city, saved_country=country, saved_description=description)
-            with st.spinner("Reading your description..."):
-                st.session_state["intake"] = api_stub.analyze_household(f"{city}, {country}", description)
-            go_to("followups")
+        with st.spinner("Reading your description..."):
+                try:
+                    st.session_state["intake"] = api_stub.analyze_household(
+                        f"{city}, {country}", description
+                    )
+                except ValueError as err:
+                    st.session_state.pop("intake", None)
+                    st.error(str(err))
+                    st.stop()
+        go_to("followups")
 
     C.privacy_line()
     C.h3("What happens next?")
