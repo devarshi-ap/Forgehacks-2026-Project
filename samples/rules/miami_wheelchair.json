@@ -1,0 +1,17 @@
+{
+  "_note": "Example Module 3 input: the README persona. 'risks' is Module 1's output, 'profile' is the flat profile from the spec.",
+  "risks": {
+    "location": {"name": "Miami", "county": "Miami-Dade", "state": "FL", "fips": "12086"},
+    "risks": [
+      {"hazard": "hurricane", "score": 99.9, "rating": "Very High"},
+      {"hazard": "flood", "score": 99.7, "rating": "Very High"},
+      {"hazard": "heat", "score": 61.2, "rating": "Relatively Moderate"}
+    ]
+  },
+  "profile": {
+    "housing": "apartment", "floor": 3, "has_elevator": true,
+    "lives_alone": true, "mobility": "powered_wheelchair",
+    "has_backup_power": null, "drives": false, "has_ac": null, "helper_nearby": null,
+    "power_medical": [], "fridge_meds": [], "pets": [], "uncovered_needs": []
+  }
+}
