@@ -1,17 +1,2 @@
-# Secrets: never commit API keys
 .env
-
-# Virtual environment
-.venv/
-venv/
-
-# Python cache files
 __pycache__/
-*.pyc
-.pytest_cache/
-
-# Editor and OS files
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
