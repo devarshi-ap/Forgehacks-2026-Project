@@ -10,6 +10,7 @@ what must they never do, and what are they missing?
       "uncovered_hazards": [],
       "uncovered_needs": [],
       "household_needs": {"memory_loss_or_dementia": ["mom"], ...},
+      "needs_by_cmist": {"Communication": {}, "Support and safety": {"memory_loss_or_dementia": ["mom"]}, ...},
       "must_do":  [{"rule_id": "PWR-WHEELCHAIR", "action": "...", "when": "This week",
                     "priority": 1, "hazards": [], "for_whom": [], "source_id": "READY-DISABILITY",
                     "source": "Ready.gov · People with Disabilities"}, ...],
@@ -77,6 +78,8 @@ SOURCES: dict[str, dict] = {
          "url": "https://www.ready.gov/power-outages"},
         {"id": "READY-EVACUATION", "publisher": "Ready.gov", "title": "Evacuation",
          "url": "https://www.ready.gov/evacuation"},
+        {"id": "READY-COPING", "publisher": "Ready.gov", "title": "Coping with Disaster",
+         "url": "https://www.ready.gov/coping-with-disaster"},
         {"id": "READY-PETS", "publisher": "Ready.gov", "title": "Pets and Animals",
          "url": "https://www.ready.gov/pets"},
         {"id": "READY-HURRICANE", "publisher": "Ready.gov", "title": "Hurricanes",
@@ -117,25 +120,46 @@ PROFILE_DEFAULTS: dict = {
     "needs": {},               # need tag -> who has it, e.g. {"memory_loss_or_dementia": ["mom"]}
 }
 
-# Need tags Module 2 can return (same list as NEED_TAGS in schemas.py). Every tag has a rule.
+# Need tags Module 2 can return, grouped by CMIST (Communication, Maintaining health,
+# Independence, Support and safety, Transportation), the "access and functional needs"
+# framework emergency planners use. Same lists as CMIST in schemas.py. Every tag has a rule.
 # "you" is the person filling in the form; other people keep the name Module 2 gave them.
-NEED_TAGS = (
-    "walker_cane_or_crutches",
-    "deaf_or_hard_of_hearing",
-    "blind_or_low_vision",
-    "memory_loss_or_dementia",
-    "autism_or_developmental",
-    "daily_medication",
-    "refrigerated_medication",
-    "power_dependent_device",
-    "dialysis_or_regular_treatment",
-    "breathing_condition",
-    "pregnant",
-    "infant_or_young_child",
-    "older_adult",
-    "limited_english",
-    "service_animal",
-)
+CMIST = {
+    "Communication": (
+        "deaf_or_hard_of_hearing",
+        "blind_or_low_vision",
+        "speech_difficulty",
+        "limited_english",
+    ),
+    "Maintaining health": (
+        "daily_medication",
+        "refrigerated_medication",
+        "power_dependent_device",
+        "dialysis_or_regular_treatment",
+        "breathing_condition",
+        "special_diet_or_allergy",
+        "pregnant",
+    ),
+    "Independence": (
+        "walker_cane_or_crutches",
+        "everyday_aids",
+        "service_animal",
+    ),
+    "Support and safety": (
+        "memory_loss_or_dementia",
+        "autism_or_developmental",
+        "mental_health_condition",
+        "needs_personal_care",
+        "infant_or_young_child",
+        "older_adult",
+    ),
+    "Transportation": (
+        "needs_accessible_transport",
+    ),
+}
+
+NEED_TAGS = tuple(tag for tags in CMIST.values() for tag in tags)
+CMIST_GROUP = {tag: group for group, tags in CMIST.items() for tag in tags}
 
 # Words in Module 2's free-text medical_equipment list that mean "needs electricity".
 _POWER_WORDS = ("oxygen", "concentrator", "cpap", "bipap", "ventilator", "dialysis", "nebulizer",
@@ -414,6 +438,15 @@ RULES: list[Rule] = [
                  "No way to evacuate without a car",
                  "Register with your county's evacuation-assistance program, or arrange a ride with "
                  "someone who drives before a warning is issued.")),
+    Rule("TRANS-ACCESSIBLE", ("hurricane", "flood", "wildfire"), always,
+         "Arrange accessible transport for evacuation in advance, such as your local paratransit or "
+         "evacuation-assistance program, because an ordinary car or bus may not work.",
+         "READY-EVACUATION", WHEN_NOW, 1,
+         gap=Gap(lambda p: True,
+                 "No accessible way to evacuate",
+                 "Register with your local paratransit or evacuation-assistance program before a "
+                 "warning is issued."),
+         needs=("needs_accessible_transport",)),
     Rule("PETS-PLAN", (), lambda p, h: bool(p["pets"]),
          "Include your pets in your plan: pet food, water and medicines in your kit, and a "
          "pet-friendly shelter or hotel you can go to.",
@@ -438,11 +471,20 @@ RULES: list[Rule] = [
                  "No backup plan for regular treatment",
                  "Ask the clinic for its emergency plan and a backup location before a disaster."),
          needs=("dialysis_or_regular_treatment",)),
+    Rule("HEALTH-DIET", (), always,
+         "Pack several days of safe food for special diets or allergies, plus feeding supplies and "
+         "allergy medicine such as epinephrine; shelters may not have them.",
+         "READY-KIT", WHEN_NOW, 2,
+         needs=("special_diet_or_allergy",)),
     Rule("MOB-AID", (), always,
          "Keep walkers, canes or crutches next to the bed so they are within reach in the dark, and "
          "pack a spare if you can.",
          "READY-DISABILITY", WHEN_NOW, 3,
          needs=("walker_cane_or_crutches",)),
+    Rule("AID-SPARES", (), always,
+         "Keep spare glasses, hearing-aid batteries and other everyday aids in your emergency kit.",
+         "READY-DISABILITY", WHEN_NOW, 3,
+         needs=("everyday_aids",)),
     Rule("COMM-HEARING", (), always,
          "Set up alerts that can be seen or felt, such as text alerts and a flashing or vibrating "
          "alarm, and ask a neighbour to warn them in person.",
@@ -453,6 +495,11 @@ RULES: list[Rule] = [
          "practise the way out with someone.",
          "READY-DISABILITY", WHEN_NOW, 2,
          needs=("blind_or_low_vision",)),
+    Rule("COMM-SPEECH", (), always,
+         "Keep a card or phone note that explains how they communicate and what they need, and find "
+         "out whether you can text 911 where you live.",
+         "READY-DISABILITY", WHEN_NOW, 2,
+         needs=("speech_difficulty",)),
     Rule("COMM-LANGUAGE", (), always,
          "Sign up for alerts in the language they read best where available, and agree with an "
          "English speaker to pass on official updates.",
@@ -463,6 +510,20 @@ RULES: list[Rule] = [
          "and a card with your contact details on them in case you get separated.",
          "READY-DISABILITY", WHEN_NOW, 2,
          needs=("memory_loss_or_dementia", "autism_or_developmental")),
+    Rule("SUPPORT-MENTAL", (), always,
+         "Keep a supply of mental health medicines and the care team's contacts in your kit, and agree "
+         "on a trusted person to call and simple calming steps for stressful moments.",
+         "READY-COPING", WHEN_NOW, 2,
+         needs=("mental_health_condition",)),
+    Rule("SUPPORT-CARE", (), always,
+         "Plan for days when the usual caregiver or aide cannot come: name a backup caregiver and write "
+         "down the daily care routine so someone else can follow it.",
+         "READY-DISABILITY", WHEN_NOW, 1,
+         gap=Gap(lambda p: not_yes(p["helper_nearby"]),
+                 "No backup caregiver",
+                 "Ask a family member, neighbour or your care agency who would step in if the usual "
+                 "caregiver cannot come."),
+         needs=("needs_personal_care",)),
     Rule("FAMILY-BABY", (), always,
          "Pack supplies for babies, young children or pregnancy in your kit, such as formula, diapers "
          "and prenatal records, and plan how you will reach children at school or childcare.",
@@ -638,6 +699,8 @@ def evaluate(risks, profile) -> dict:
         "uncovered_hazards": [h for h in hazards if h not in SUPPORTED_HAZARDS],
         "uncovered_needs": p["uncovered_needs"],
         "household_needs": p["needs"],
+        "needs_by_cmist": {group: {t: p["needs"][t] for t in tags if t in p["needs"]}
+                           for group, tags in CMIST.items()},
         "must_do": must_do,
         "never_do": _unique(phrase for r in fired for phrase in r.never_do),
         "gaps": gaps,

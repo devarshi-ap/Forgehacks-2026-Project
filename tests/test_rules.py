@@ -36,7 +36,7 @@ def gap_messages(result) -> list[str]:
 # ---- the rule table itself ---------------------------------------------------
 
 def test_rule_count_matches_the_plan():
-    assert 25 <= len(rules.RULES) <= 40
+    assert 30 <= len(rules.RULES) <= 45
 
 
 def test_rule_ids_are_unique_and_tag_safe():
@@ -349,6 +349,8 @@ def test_need_tags_match_module2_schema_when_available():
     if not hasattr(schemas, "NEED_TAGS"):
         pytest.skip("older schemas.py without need tags")
     assert tuple(schemas.NEED_TAGS) == rules.NEED_TAGS
+    if hasattr(schemas, "CMIST"):
+        assert {g: tuple(v) for g, v in schemas.CMIST.items()} == rules.CMIST
 
 
 def test_household_with_mom_dad_and_son():
@@ -405,3 +407,37 @@ def test_unknown_tag_goes_to_uncovered_needs():
 def test_household_rules_have_no_one_named():
     result = rules.evaluate(["flood"], profile())
     assert for_whom(result, "FLOOD-HIGH-GROUND") == []
+
+
+# ---- CMIST ---------------------------------------------------------------------
+
+def test_cmist_groups_are_complete_and_disjoint():
+    assert list(rules.CMIST) == ["Communication", "Maintaining health", "Independence",
+                                 "Support and safety", "Transportation"]
+    assert len(rules.NEED_TAGS) == len(set(rules.NEED_TAGS)) == len(rules.CMIST_GROUP)
+
+
+def test_every_cmist_group_has_rules():
+    groups = {rules.CMIST_GROUP[tag] for r in rules.RULES for tag in r.needs}
+    assert groups == set(rules.CMIST)
+
+
+def test_needs_are_reported_by_cmist_group():
+    result = rules.evaluate(["flood"], profile(needs=["speech_difficulty"],
+                                               others=[{"who": "grandma", "needs": ["needs_personal_care"]}]))
+    by_group = result["needs_by_cmist"]
+    assert by_group["Communication"] == {"speech_difficulty": ["you"]}
+    assert by_group["Support and safety"] == {"needs_personal_care": ["grandma"]}
+    assert by_group["Transportation"] == {}
+
+
+def test_personal_care_without_backup_is_a_top_gap():
+    result = rules.evaluate(["heat"], profile(others=[{"who": "dad", "needs": ["needs_personal_care"]}]))
+    gap = next(g for g in result["gaps"] if g["rule_id"] == "SUPPORT-CARE")
+    assert gap["priority"] == 1 and gap["for_whom"] == ["dad"]
+
+
+def test_accessible_transport_only_matters_when_you_might_evacuate():
+    stretcher = profile(needs=["needs_accessible_transport"])
+    assert "TRANS-ACCESSIBLE" in ids(rules.evaluate(["hurricane"], stretcher))
+    assert "TRANS-ACCESSIBLE" not in ids(rules.evaluate(["earthquake"], stretcher))
