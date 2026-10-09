@@ -9,8 +9,9 @@ what must they never do, and what are they missing?
       "hazards": ["hurricane", "flood", "heat"],
       "uncovered_hazards": [],
       "uncovered_needs": [],
+      "household_needs": {"memory_loss_or_dementia": ["mom"], ...},
       "must_do":  [{"rule_id": "PWR-WHEELCHAIR", "action": "...", "when": "This week",
-                    "priority": 1, "hazards": [], "source_id": "READY-DISABILITY",
+                    "priority": 1, "hazards": [], "for_whom": [], "source_id": "READY-DISABILITY",
                     "source": "Ready.gov · People with Disabilities"}, ...],
       "never_do": ["go to the basement", "drive through flood water", ...],
       "gaps":     [{"rule_id": "PWR-WHEELCHAIR", "message": "No backup charging for your wheelchair",
@@ -19,7 +20,8 @@ what must they never do, and what are they missing?
     }
 
 How it works (no AI here; this is plain code on purpose, so it can be tested):
-  1. Clean up the profile (accepts the flat spec shape or Module 2's nested shape).
+  1. Clean up the profile (accepts the flat spec shape or Module 2's nested shape) and
+     collect every need tag in the household with who has it ("you", "mom", ...).
   2. Every rule below has a condition on the hazards and the profile. Keep the ones that fire.
   3. A rule can also name a gap: something the household is missing. Unknown (None) counts
      as missing, because it's safer to point out a gap that isn't there than to hide one.
@@ -27,7 +29,8 @@ How it works (no AI here; this is plain code on purpose, so it can be tested):
 
 Who uses the output:
   - Module 4 (plan writer) must tag every must_do step with its [RULE-ID] and must never
-    write a never_do phrase.
+    write a never_do phrase. "for_whom" tells it who a step is about, so it can say
+    "your mom" instead of "someone in your home".
   - Module 5 (verifier) checks exactly that.
   - The UI shows `sources` and the gaps.
 
@@ -106,11 +109,33 @@ PROFILE_DEFAULTS: dict = {
     "drives": None,
     "has_ac": None,
     "helper_nearby": None,     # someone nearby who can help them leave / check on them
+    "below_ground": None,      # lives in a basement / below street level
     "power_medical": [],       # e.g. ["oxygen concentrator"]
     "fridge_meds": [],         # e.g. ["insulin"]
     "pets": [],                # e.g. ["dog"]
     "uncovered_needs": [],     # needs no rule covers; passed through to Module 4
+    "needs": {},               # need tag -> who has it, e.g. {"memory_loss_or_dementia": ["mom"]}
 }
+
+# Need tags Module 2 can return (same list as NEED_TAGS in schemas.py). Every tag has a rule.
+# "you" is the person filling in the form; other people keep the name Module 2 gave them.
+NEED_TAGS = (
+    "walker_cane_or_crutches",
+    "deaf_or_hard_of_hearing",
+    "blind_or_low_vision",
+    "memory_loss_or_dementia",
+    "autism_or_developmental",
+    "daily_medication",
+    "refrigerated_medication",
+    "power_dependent_device",
+    "dialysis_or_regular_treatment",
+    "breathing_condition",
+    "pregnant",
+    "infant_or_young_child",
+    "older_adult",
+    "limited_english",
+    "service_animal",
+)
 
 # Words in Module 2's free-text medical_equipment list that mean "needs electricity".
 _POWER_WORDS = ("oxygen", "concentrator", "cpap", "bipap", "ventilator", "dialysis", "nebulizer",
@@ -168,6 +193,7 @@ def _from_nested(raw: dict) -> dict:
     out["housing"] = home.get("type")
     out["floor"] = home.get("floor")
     out["has_elevator"] = home.get("has_lift")
+    out["below_ground"] = home.get("below_ground")
     if mob.get("uses_wheelchair") is True:
         wtype = (mob.get("wheelchair_type") or "").lower()
         out["mobility"] = {"powered": "powered_wheelchair", "manual": "manual_wheelchair"}.get(wtype, "wheelchair")
@@ -206,7 +232,60 @@ def normalize_profile(profile) -> dict:
         p["floor"] = None
     for key in ("power_medical", "fridge_meds", "pets", "uncovered_needs"):
         p[key] = _as_list(p[key])
+    if p["below_ground"] is None:
+        housing_text = str(raw.get("housing") or "").lower()
+        if (p["floor"] is not None and p["floor"] < 0) or "basement" in housing_text:
+            p["below_ground"] = True
+    p["needs"] = _collect_needs(raw, p)
     return p
+
+
+def _age(value) -> Optional[int]:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _collect_needs(raw: dict, p: dict) -> dict[str, list[str]]:
+    """Every need in the household as {tag: [who, ...]}. Unknown tags go to uncovered_needs."""
+    needs: dict[str, list[str]] = {}
+
+    def add(tag, who):
+        tag = str(tag).strip()
+        if tag not in NEED_TAGS:
+            if tag and tag not in p["uncovered_needs"]:
+                p["uncovered_needs"].append(tag)
+            return
+        people = needs.setdefault(tag, [])
+        if who not in people:
+            people.append(who)
+
+    def add_age(age, who):
+        if age is not None and age >= 65:
+            add("older_adult", who)
+        elif age is not None and age < 5:
+            add("infant_or_young_child", who)
+
+    for tag in _as_list(raw.get("needs")):
+        add(tag, "you")
+    add_age(_age(raw.get("age")), "you")
+    # Older profile fields still count.
+    if p["power_medical"]:
+        add("power_dependent_device", "you")
+    if p["fridge_meds"]:
+        add("refrigerated_medication", "you")
+    if p["mobility"] == "walker_or_cane":
+        add("walker_cane_or_crutches", "you")
+
+    for member in raw.get("others") or []:
+        if not isinstance(member, dict):
+            continue
+        who = str(member.get("who") or "").strip() or "someone at home"
+        for tag in _as_list(member.get("needs")):
+            add(tag, who)
+        add_age(_age(member.get("age")), who)
+    return needs
 
 
 # Small, readable conditions the rules are built from.
@@ -215,11 +294,11 @@ def uses_wheelchair(p) -> bool:
 
 
 def limited_mobility(p) -> bool:
-    return uses_wheelchair(p) or p["mobility"] == "walker_or_cane"
+    return uses_wheelchair(p) or "walker_cane_or_crutches" in p["needs"]
 
 
 def needs_power(p) -> bool:
-    return p["mobility"] == "powered_wheelchair" or bool(p["power_medical"])
+    return p["mobility"] == "powered_wheelchair" or "power_dependent_device" in p["needs"]
 
 
 def above_ground(p) -> bool:
@@ -257,11 +336,18 @@ class Rule:
     priority: int                     # 1 = most urgent
     never_do: tuple[str, ...] = ()
     gap: Optional[Gap] = None
+    needs: tuple[str, ...] = ()       # fires only if someone at home has one of these tags
 
     def fires(self, p: dict, hazards: list[str]) -> bool:
         if self.hazards and not set(self.hazards) & set(hazards):
             return False
+        if self.needs and not any(tag in p["needs"] for tag in self.needs):
+            return False
         return self.applies(p, hazards)
+
+    def for_whom(self, p: dict) -> list[str]:
+        """Who in the household this rule is about, e.g. ["mom"]; empty for household-wide rules."""
+        return _unique(who for tag in self.needs for who in p["needs"].get(tag, []))
 
 
 FLOOD_WATER = ("drive through flood water", "walk through flood water", "drive through a flooded road")
@@ -286,28 +372,30 @@ RULES: list[Rule] = [
          gap=Gap(lambda p: not_yes(p["has_backup_power"]),
                  "No backup charging for your wheelchair",
                  "Get a backup battery, or find a nearby place with power where you can recharge.")),
-    Rule("PWR-MEDICAL", (), lambda p, h: bool(p["power_medical"]),
+    Rule("PWR-MEDICAL", (), always,
          "Make a backup power plan for your medical equipment: extra batteries, ask your power company "
          "about its medical-needs list, and know where you can go early to get power.",
          "READY-POWER", WHEN_NOW, 1,
          gap=Gap(lambda p: not_yes(p["has_backup_power"]),
                  "Your medical equipment has no backup power",
                  "Get backup batteries, register with your power company's medical-needs program, and "
-                 "pick a place with power you can go to before an outage.")),
+                 "pick a place with power you can go to before an outage."),
+         needs=("power_dependent_device",)),
     Rule("PWR-GENERATOR", (), lambda p, h: needs_power(p) or "hurricane" in h,
          "If you use a generator, keep it outdoors and well away from windows and doors, because its "
          "exhaust contains deadly carbon monoxide.",
          "READY-POWER", WHEN_DURING, 3,
          never_do=("run a generator indoors", "use a generator indoors", "run a generator inside",
                    "run a generator in the garage")),
-    Rule("MEDS-FRIDGE", (), lambda p, h: bool(p["fridge_meds"]),
+    Rule("MEDS-FRIDGE", (), always,
          "Plan how to keep your refrigerated medicine cold during a power outage, such as a cooler "
          "with ice packs, and ask your pharmacist how long it stays safe without a fridge.",
          "READY-POWER", WHEN_NOW, 2,
          gap=Gap(lambda p: not_yes(p["has_backup_power"]),
                  "No way to keep your medicine cold in an outage",
                  "Keep a cooler and ice packs ready, and ask your pharmacist how long your medicine "
-                 "stays safe unrefrigerated.")),
+                 "stays safe unrefrigerated."),
+         needs=("refrigerated_medication",)),
 
     # ---- getting out --------------------------------------------------------
     Rule("EVAC-HELP", (), lambda p, h: limited_mobility(p) and above_ground(p),
@@ -332,7 +420,60 @@ RULES: list[Rule] = [
          "READY-PETS", WHEN_NOW, 4,
          never_do=("leave your pets behind", "leave pets behind")),
 
-    # ---- hurricane ----------------------------------------------------------
+    # ---- people with specific needs -------------------------------------------
+    Rule("MEDS-LIST", (), always,
+         "Write down every medicine each person in your home takes, with doses, and keep a copy in "
+         "your emergency kit.",
+         "READY-KIT", WHEN_NOW, 4),
+    Rule("MEDS-SUPPLY", (), always,
+         "Keep an extra supply of daily medicines, as much as your pharmacy and insurance allow, so a "
+         "closed pharmacy or blocked road does not leave anyone without them.",
+         "READY-KIT", WHEN_NOW, 2,
+         needs=("daily_medication", "refrigerated_medication")),
+    Rule("MED-TREATMENT", (), always,
+         "Ask the clinic now where treatment such as dialysis would happen if it closes, and keep the "
+         "schedule and the clinic's emergency contacts in your kit.",
+         "READY-DISABILITY", WHEN_NOW, 1,
+         gap=Gap(lambda p: True,
+                 "No backup plan for regular treatment",
+                 "Ask the clinic for its emergency plan and a backup location before a disaster."),
+         needs=("dialysis_or_regular_treatment",)),
+    Rule("MOB-AID", (), always,
+         "Keep walkers, canes or crutches next to the bed so they are within reach in the dark, and "
+         "pack a spare if you can.",
+         "READY-DISABILITY", WHEN_NOW, 3,
+         needs=("walker_cane_or_crutches",)),
+    Rule("COMM-HEARING", (), always,
+         "Set up alerts that can be seen or felt, such as text alerts and a flashing or vibrating "
+         "alarm, and ask a neighbour to warn them in person.",
+         "READY-DISABILITY", WHEN_NOW, 2,
+         needs=("deaf_or_hard_of_hearing",)),
+    Rule("COMM-VISION", (), always,
+         "Get alerts in an accessible format such as audio or large print, keep a spare cane, and "
+         "practise the way out with someone.",
+         "READY-DISABILITY", WHEN_NOW, 2,
+         needs=("blind_or_low_vision",)),
+    Rule("COMM-LANGUAGE", (), always,
+         "Sign up for alerts in the language they read best where available, and agree with an "
+         "English speaker to pass on official updates.",
+         "READY-ALERTS", WHEN_NOW, 2,
+         needs=("limited_english",)),
+    Rule("CARE-SUPERVISION", (), always,
+         "Agree who will stay with them during an emergency and evacuation, and keep a recent photo "
+         "and a card with your contact details on them in case you get separated.",
+         "READY-DISABILITY", WHEN_NOW, 2,
+         needs=("memory_loss_or_dementia", "autism_or_developmental")),
+    Rule("FAMILY-BABY", (), always,
+         "Pack supplies for babies, young children or pregnancy in your kit, such as formula, diapers "
+         "and prenatal records, and plan how you will reach children at school or childcare.",
+         "READY-KIT", WHEN_NOW, 3,
+         needs=("infant_or_young_child", "pregnant")),
+    Rule("SERVICE-ANIMAL", (), always,
+         "Plan to bring the service animal when you evacuate; public shelters must admit service "
+         "animals. Pack its food, water and records.",
+         "READY-DISABILITY", WHEN_NOW, 3,
+         needs=("service_animal",)),
+
     Rule("HUR-EVAC-ZONE", ("hurricane",), always,
          "Find out whether you live in a hurricane evacuation zone, and leave right away if officials "
          "tell you to evacuate.",
@@ -354,6 +495,14 @@ RULES: list[Rule] = [
          "threatens.",
          "READY-FLOOD", WHEN_WARNING, 2,
          never_do=("go to the basement", "shelter in the basement", "climb into a closed attic")),
+    Rule("FLOOD-BASEMENT", ("flood",), lambda p, h: p["below_ground"] is True,
+         "If you live below ground, move everyone to a higher floor or higher ground as soon as a "
+         "flood warning is issued; below-ground rooms can fill with water in minutes.",
+         "READY-FLOOD", WHEN_WARNING, 1,
+         never_do=("stay in the basement", "sleep in the basement"),
+         gap=Gap(lambda p: True,
+                 "Your home is below ground",
+                 "Agree now where above ground you will go during a flood warning, and how to get there.")),
     Rule("FLOOD-TADD", ("flood",), always,
          "Turn around, don't drown: stay out of flood water on foot or in a car. Just six inches of "
          "moving water can knock you off your feet.",
@@ -376,6 +525,11 @@ RULES: list[Rule] = [
          gap=Gap(lambda p: not_yes(p["helper_nearby"]),
                  "No one checks on you",
                  "Ask a neighbour or friend to check on you every day during heat alerts.")),
+    Rule("HEAT-HIGH-RISK", ("heat",), always,
+         "Older adults, young children, pregnant people and people with lung conditions get sick "
+         "from heat faster: keep them somewhere cool during heat warnings and check on them often.",
+         "READY-HEAT", WHEN_WARNING, 2,
+         needs=("older_adult", "infant_or_young_child", "pregnant", "breathing_condition")),
     Rule("HEAT-HYDRATE", ("heat",), always,
          "During a heat warning, drink plenty of fluids, stay out of the sun in the hottest part of "
          "the day, and learn the signs of heat stroke.",
@@ -406,6 +560,11 @@ RULES: list[Rule] = [
          "more than one way out of your area.",
          "READY-WILDFIRE", WHEN_WARNING, 2,
          never_do=("wait until you see flames",)),
+    Rule("WF-BREATHING", ("wildfire",), always,
+         "Keep extra inhalers or breathing medicine, and stay indoors with windows closed when wildfire "
+         "smoke is in the area.",
+         "READY-WILDFIRE", WHEN_WARNING, 2,
+         needs=("breathing_condition",)),
     Rule("WF-SMOKE", ("wildfire",), always,
          "Prepare for wildfire smoke: keep N95 masks at home and choose a room you can keep closed "
          "up with clean air.",
@@ -458,6 +617,7 @@ def evaluate(risks, profile) -> dict:
         "when": r.when,
         "priority": r.priority,
         "hazards": [h for h in supported if h in r.hazards],
+        "for_whom": r.for_whom(p),
         "source_id": r.source_id,
         "source": f'{SOURCES[r.source_id]["publisher"]} · {SOURCES[r.source_id]["title"]}',
     } for r in fired]
@@ -467,6 +627,7 @@ def evaluate(risks, profile) -> dict:
         "message": r.gap.message,
         "fix": r.gap.fix,
         "priority": r.priority,
+        "for_whom": r.for_whom(p),
         "source_id": r.source_id,
     } for r in fired if r.gap and r.gap.missing(p)]
     for rank, gap in enumerate(gaps, start=1):
@@ -476,6 +637,7 @@ def evaluate(risks, profile) -> dict:
         "hazards": supported,
         "uncovered_hazards": [h for h in hazards if h not in SUPPORTED_HAZARDS],
         "uncovered_needs": p["uncovered_needs"],
+        "household_needs": p["needs"],
         "must_do": must_do,
         "never_do": _unique(phrase for r in fired for phrase in r.never_do),
         "gaps": gaps,

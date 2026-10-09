@@ -36,7 +36,7 @@ def gap_messages(result) -> list[str]:
 # ---- the rule table itself ---------------------------------------------------
 
 def test_rule_count_matches_the_plan():
-    assert 15 <= len(rules.RULES) <= 25
+    assert 25 <= len(rules.RULES) <= 40
 
 
 def test_rule_ids_are_unique_and_tag_safe():
@@ -243,7 +243,7 @@ def test_output_is_json_serialisable():
 
 def test_empty_profile_and_no_risks_do_not_crash():
     result = rules.evaluate([], None)
-    assert ids(result) == ["GEN-ALERTS", "GEN-KIT"]
+    assert ids(result) == ["GEN-ALERTS", "GEN-KIT", "MEDS-LIST"]
     assert result["gaps"] == []
 
 
@@ -320,3 +320,88 @@ def test_output_works_with_the_verifier():
     assert verifier.verify_plan(bad, result)["forbidden_found"] == ["go to the basement"]
     checklist = verifier.rules_to_checklist(result)
     assert all(f"[{m['rule_id']}]" in checklist for m in result["must_do"])
+
+
+# ---- wider coverage: need tags and other people at home -------------------------
+
+ALL_HAZARDS = list(rules.SUPPORTED_HAZARDS)
+
+
+def for_whom(result, rule_id) -> list[str]:
+    return next(m["for_whom"] for m in result["must_do"] if m["rule_id"] == rule_id)
+
+
+def test_every_need_tag_has_a_rule():
+    tagged = {tag for r in rules.RULES for tag in r.needs}
+    assert tagged == set(rules.NEED_TAGS)
+
+
+@pytest.mark.parametrize("tag", rules.NEED_TAGS)
+def test_each_tag_changes_the_plan(tag):
+    baseline = set(ids(rules.evaluate(ALL_HAZARDS, profile())))
+    with_tag = set(ids(rules.evaluate(ALL_HAZARDS, profile(others=[{"who": "mom", "needs": [tag]}]))))
+    assert with_tag - baseline, f"{tag} fires no extra rule"
+
+
+def test_need_tags_match_module2_schema_when_available():
+    """Runs only once schemas.py from module2-profile-coverage is merged in."""
+    schemas = pytest.importorskip("schemas")
+    if not hasattr(schemas, "NEED_TAGS"):
+        pytest.skip("older schemas.py without need tags")
+    assert tuple(schemas.NEED_TAGS) == rules.NEED_TAGS
+
+
+def test_household_with_mom_dad_and_son():
+    """Mom has dementia and takes insulin, dad uses crutches, son is 6."""
+    household = {**MODULE2_NESTED, "mobility": {"uses_wheelchair": False, "wheelchair_type": None},
+                 "medical_equipment": [], "lives_alone": False,
+                 "others": [{"who": "mom", "age": 78, "needs": ["memory_loss_or_dementia", "refrigerated_medication"]},
+                            {"who": "dad", "age": 80, "needs": ["walker_cane_or_crutches"]},
+                            {"who": "son", "age": 6, "needs": []}]}
+    result = rules.evaluate(MIAMI, household)
+    assert for_whom(result, "CARE-SUPERVISION") == ["mom"]
+    assert for_whom(result, "MEDS-FRIDGE") == ["mom"]
+    assert for_whom(result, "MOB-AID") == ["dad"]
+    assert for_whom(result, "HEAT-HIGH-RISK") == ["mom", "dad"]  # both over 65
+    assert "son" not in for_whom(result, "HEAT-HIGH-RISK")      # 6 is not a young child
+    assert "EVAC-HELP" in ids(result)                            # dad's crutches + 3rd floor
+
+
+def test_deaf_pregnant_in_a_basement_with_a_dog():
+    result = rules.evaluate(["flood"], profile(needs=["deaf_or_hard_of_hearing", "pregnant"],
+                                               housing="basement apartment", pets=["dog"]))
+    for rid in ("COMM-HEARING", "FAMILY-BABY", "FLOOD-BASEMENT", "PETS-PLAN"):
+        assert rid in ids(result)
+    basement_gap = next(g for g in result["gaps"] if g["rule_id"] == "FLOOD-BASEMENT")
+    assert basement_gap["priority"] == 1
+    assert "stay in the basement" in result["never_do"]
+    assert for_whom(result, "COMM-HEARING") == ["you"]
+
+
+def test_basement_detection():
+    assert rules.normalize_profile({"housing": "basement apartment"})["below_ground"] is True
+    assert rules.normalize_profile({"floor": -1})["below_ground"] is True
+    assert rules.normalize_profile({"floor": 0})["below_ground"] is None   # ground floor in many countries
+    nested = {**MODULE2_NESTED, "home": {**MODULE2_NESTED["home"], "below_ground": True}}
+    assert rules.normalize_profile(nested)["below_ground"] is True
+
+
+def test_age_adds_older_adult_and_young_child():
+    needs = rules.normalize_profile({"age": 70, "others": [{"who": "baby", "age": 1}]})["needs"]
+    assert needs == {"older_adult": ["you"], "infant_or_young_child": ["baby"]}
+
+
+def test_old_fields_still_become_tags():
+    needs = rules.normalize_profile({"power_medical": ["cpap"], "fridge_meds": ["insulin"],
+                                     "mobility": "cane"})["needs"]
+    assert set(needs) == {"power_dependent_device", "refrigerated_medication", "walker_cane_or_crutches"}
+
+
+def test_unknown_tag_goes_to_uncovered_needs():
+    result = rules.evaluate(["heat"], profile(needs=["needs a translator for ASL"]))
+    assert "needs a translator for ASL" in result["uncovered_needs"]
+
+
+def test_household_rules_have_no_one_named():
+    result = rules.evaluate(["flood"], profile())
+    assert for_whom(result, "FLOOD-HIGH-GROUND") == []
