@@ -1,0 +1,34 @@
+{
+  "profile": {
+    "home_type": "Apartment",
+    "floor": 3,
+    "wheelchair_user": true,
+    "no_car": true,
+    "uncovered_needs": ["Accessible emergency transport"]
+  },
+  "top_risks": ["Flooding", "Extreme Heat"],
+  "module3_output": {
+    "gaps": ["Confirm an accessible evacuation route."],
+    "uncovered_needs": ["Accessible emergency transport"],
+    "rules": [
+      {
+        "rule_id": "FLOOD-001",
+        "hazard": "Flooding",
+        "action": "Follow official evacuation instructions and avoid floodwater.",
+        "source": {
+          "name": "Ready.gov Floods",
+          "url": "https://www.ready.gov/floods"
+        }
+      },
+      {
+        "rule_id": "HEAT-001",
+        "hazard": "Extreme Heat",
+        "action": "Stay in a cool location and follow local heat advisories.",
+        "source": {
+          "name": "Ready.gov Extreme Heat",
+          "url": "https://www.ready.gov/heat"
+        }
+      }
+    ]
+  }
+}
