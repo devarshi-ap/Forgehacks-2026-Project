@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from groq import Groq
 
-from app.models.schemas import IntakeAIResult
+from schemas import IntakeAIResult
 
 
 # ---------------------------------------------------------
