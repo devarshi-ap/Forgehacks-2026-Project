@@ -74,12 +74,18 @@ The profile contains:
 - whether they have air conditioning
 - needs that fit no tag (uncovered_needs)
 
-Needs are tags from this list ONLY:
-- walker_cane_or_crutches: uses a walker, cane, crutches or rollator
-- deaf_or_hard_of_hearing: deaf, hard of hearing, hearing aids
+Needs are tags from this list ONLY, grouped by CMIST
+(Communication, Maintaining health, Independence, Support and safety,
+Transportation). A person can have tags from several groups.
+
+Communication (getting and understanding warnings):
+- deaf_or_hard_of_hearing: deaf, hard of hearing, uses hearing aids
 - blind_or_low_vision: blind, low vision, cannot read small text
-- memory_loss_or_dementia: dementia, Alzheimer's, gets confused or lost
-- autism_or_developmental: autism, intellectual or developmental disability
+- speech_difficulty: hard to speak or be understood, non-verbal,
+  uses sign language or a communication device
+- limited_english: limited English or prefers another language
+
+Maintaining health (what keeps them well):
 - daily_medication: takes medicine every day
 - refrigerated_medication: medicine that must stay cold (e.g. insulin)
 - power_dependent_device: oxygen, CPAP, ventilator, home dialysis or
@@ -87,11 +93,29 @@ Needs are tags from this list ONLY:
 - dialysis_or_regular_treatment: dialysis, chemotherapy or other
   treatment they must travel to on a schedule
 - breathing_condition: asthma, COPD or other lung condition
+- special_diet_or_allergy: severe food allergy, feeding tube or a
+  diet they cannot go without (e.g. diabetic, celiac)
 - pregnant
+
+Independence (aids they rely on):
+- walker_cane_or_crutches: uses a walker, cane, crutches or rollator
+- everyday_aids: glasses, hearing aids, prosthetics or other aids that
+  need spares or batteries
+- service_animal: has a service animal (pets go in pets instead)
+
+Support and safety (needs another person):
+- memory_loss_or_dementia: dementia, Alzheimer's, gets confused or lost
+- autism_or_developmental: autism, intellectual or developmental disability
+- mental_health_condition: anxiety, PTSD, depression, bipolar disorder,
+  schizophrenia or similar
+- needs_personal_care: needs help to bathe, dress, eat, use the toilet
+  or move between bed and chair, or has a home aide or caregiver
 - infant_or_young_child: a baby or a child under about 5
 - older_adult: about 65 or older
-- limited_english: limited English or prefers another language
-- service_animal: has a service animal (pets go in pets instead)
+
+Transportation:
+- needs_accessible_transport: cannot ride in an ordinary car, e.g.
+  must stay in their wheelchair or needs a stretcher
 
 Put a tag on the person it belongs to: the user's own needs go in
 "needs", everyone else goes in "others" as

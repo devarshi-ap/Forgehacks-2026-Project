@@ -3,26 +3,46 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
-# Needs the AI may tag a person with. A closed list, so every tag has a rule
-# behind it (rules.py) and the AI can't invent new field names.
+# Needs the AI may tag a person with, grouped by CMIST: the "access and
+# functional needs" framework U.S. emergency planners use. A closed list, so
+# every tag has a rule behind it (rules.py) and the AI can't invent field names.
 # Anything that fits none of these goes in `uncovered_needs` instead.
-NEED_TAGS = (
-    "walker_cane_or_crutches",
-    "deaf_or_hard_of_hearing",
-    "blind_or_low_vision",
-    "memory_loss_or_dementia",
-    "autism_or_developmental",
-    "daily_medication",
-    "refrigerated_medication",
-    "power_dependent_device",
-    "dialysis_or_regular_treatment",
-    "breathing_condition",
-    "pregnant",
-    "infant_or_young_child",
-    "older_adult",
-    "limited_english",
-    "service_animal",
-)
+# A wheelchair, having a car and living alone have their own fields.
+CMIST = {
+    "Communication": (
+        "deaf_or_hard_of_hearing",
+        "blind_or_low_vision",
+        "speech_difficulty",
+        "limited_english",
+    ),
+    "Maintaining health": (
+        "daily_medication",
+        "refrigerated_medication",
+        "power_dependent_device",
+        "dialysis_or_regular_treatment",
+        "breathing_condition",
+        "special_diet_or_allergy",
+        "pregnant",
+    ),
+    "Independence": (
+        "walker_cane_or_crutches",
+        "everyday_aids",
+        "service_animal",
+    ),
+    "Support and safety": (
+        "memory_loss_or_dementia",
+        "autism_or_developmental",
+        "mental_health_condition",
+        "needs_personal_care",
+        "infant_or_young_child",
+        "older_adult",
+    ),
+    "Transportation": (
+        "needs_accessible_transport",
+    ),
+}
+
+NEED_TAGS = tuple(tag for tags in CMIST.values() for tag in tags)
 
 Need = Literal[NEED_TAGS]
 

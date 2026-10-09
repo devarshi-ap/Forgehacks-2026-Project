@@ -147,3 +147,23 @@ def test_empty_description_is_rejected(fake_ai):
     with pytest.raises(ValueError):
         intake_service.analyze_household("   ")
     assert fake_ai.calls == []
+
+
+# ---- CMIST grouping ----------------------------------------------------------
+
+def test_cmist_has_the_five_groups():
+    from schemas import CMIST
+    assert list(CMIST) == ["Communication", "Maintaining health", "Independence",
+                           "Support and safety", "Transportation"]
+
+
+def test_each_tag_is_in_exactly_one_group():
+    from schemas import CMIST
+    flat = [tag for tags in CMIST.values() for tag in tags]
+    assert len(flat) == len(set(flat)) == len(NEED_TAGS)
+
+
+def test_prompt_names_every_group():
+    from schemas import CMIST
+    for group in CMIST:
+        assert group in intake_service.SYSTEM_PROMPT, group
