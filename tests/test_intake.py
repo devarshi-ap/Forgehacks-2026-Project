@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("GROQ_API_KEY", "test-key-not-used")  # module refuses to import without one
 
-import intake_service  # noqa: E402
-from schemas import NEED_TAGS, HouseholdProfile, IntakeAIResult  # noqa: E402
+from stormsignal.intake import intake as intake_service  # noqa: E402
+from stormsignal.intake.schemas import CMIST, NEED_TAGS, HouseholdProfile, IntakeAIResult  # noqa: E402
 
 PROFILE_SCHEMA = intake_service.INTAKE_JSON_SCHEMA["properties"]["profile"]
 
@@ -103,7 +103,7 @@ def test_rich_reply_validates():
 
 def test_old_output_without_new_fields_still_loads():
     """Kesava's original module2_output.json predates the new fields; they default to empty/unknown."""
-    old = json.loads((ROOT / "module2_output.json").read_text(encoding="utf-8"))
+    old = json.loads((ROOT / "samples" / "intake" / "module2_output.json").read_text(encoding="utf-8"))
 
     profile = HouseholdProfile.model_validate(old["profile"])
 
@@ -154,19 +154,16 @@ def test_empty_description_is_rejected(fake_ai):
 # ---- CMIST grouping ----------------------------------------------------------
 
 def test_cmist_has_the_five_groups():
-    from schemas import CMIST
     assert list(CMIST) == ["Communication", "Maintaining health", "Independence",
                            "Support and safety", "Transportation"]
 
 
 def test_each_tag_is_in_exactly_one_group():
-    from schemas import CMIST
     flat = [tag for tags in CMIST.values() for tag in tags]
     assert len(flat) == len(set(flat)) == len(NEED_TAGS)
 
 
 def test_prompt_names_every_group():
-    from schemas import CMIST
     for group in CMIST:
         assert group in intake_service.SYSTEM_PROMPT, group
 

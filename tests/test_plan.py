@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
 import pytest
-from plan_service import build_plan
+from stormsignal.plan import build_plan
 
-FIXTURE = Path(__file__).with_name("module4_input_example.json")
+FIXTURE = Path(__file__).resolve().parent.parent / "samples" / "plan" / "module4_input_example.json"
 
 @pytest.fixture
 def sample_input():

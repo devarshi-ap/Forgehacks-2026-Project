@@ -7,10 +7,10 @@ from typing import cast
 from dotenv import load_dotenv
 from groq import Groq
 from groq.types.chat import ChatCompletionMessageParam
-from module4_schemas import PlanInput, PlanOutput
+from .schemas import PlanInput, PlanOutput
 
 
-PROJECT_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = Path(__file__).resolve().parents[2]  # project root, where .env lives
 load_dotenv(PROJECT_DIR / ".env", override=False)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()

@@ -1,29 +1,23 @@
 """Bridge between the Streamlit screens and the real modules.
 
-Module 1 (risk.py)           -> real, live (needs internet, no key)
-Module 2 (intake_service.py) -> real if it imports and GROQ_API_KEY is set,
-                                otherwise the mock intake is used
-Modules 3, 4, 5              -> still mock (mock_data/plan_example.json)
+Module 1 (stormsignal.risk)   -> real, live (needs internet, no key)
+Module 2 (stormsignal.intake) -> real if GROQ_API_KEY is set,
+                                 otherwise the mock intake is used
+Modules 3, 4, 5               -> still mock (samples/ui/plan_example.json)
 
 The screens only call analyze_household() and build_plan(); their return
 shapes do not change.
 """
 import json
-import sys
 from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-MOCK_DIR = ROOT / "mock_data"
-
-# Make the repo root importable (risk.py and intake_service.py live there).
-# Appended, not inserted first, so the root api_stub.py can never shadow this file.
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))
+MOCK_DIR = ROOT / "samples" / "ui"
 
 # ---- Module 1: risk lookup -------------------------------------------------
 try:
-    from risk import get_top_risks, LocationNotFound
+    from stormsignal.risk import get_top_risks, LocationNotFound
 except Exception as e:  # missing file, missing package, ...
     get_top_risks = None
 
@@ -34,7 +28,7 @@ except Exception as e:  # missing file, missing package, ...
 
 # ---- Module 2: AI intake ---------------------------------------------------
 try:
-    from intake_service import analyze_household as _module2_intake
+    from stormsignal.intake import analyze_household as _module2_intake
 except Exception as e:  # no GROQ_API_KEY, broken import, ...
     _module2_intake = None
     print(f"[api_stub] Module 2 not available, using mock intake: {e}")

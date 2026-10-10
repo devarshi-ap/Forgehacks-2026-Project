@@ -19,7 +19,7 @@ Expected rules shape (Module 3). Extra keys are ignored; strings are also accept
   }
 
 Try it from the command line:
-  python verifier.py samples/verifier/good_plan.md samples/verifier/rules_example.json
+  python -m stormsignal.verifier samples/verifier/good_plan.md samples/verifier/rules_example.json
 """
 from __future__ import annotations
 
@@ -173,7 +173,7 @@ def finalize(plan_markdown: str, rules: dict,
 # ---------------------------------------------------------------- command line demo
 def main(argv: list[str]) -> int:
     if len(argv) != 3:
-        print("usage: python verifier.py PLAN.md RULES.json")
+        print("usage: python -m stormsignal.verifier PLAN.md RULES.json")
         return 2
     plan = open(argv[1], encoding="utf-8").read()
     rules = json.load(open(argv[2], encoding="utf-8"))

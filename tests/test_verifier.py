@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import verifier  # noqa: E402
+from stormsignal.verifier import verifier  # noqa: E402
 
 SAMPLES = ROOT / "samples" / "verifier"
 RULES = json.loads((SAMPLES / "rules_example.json").read_text(encoding="utf-8"))

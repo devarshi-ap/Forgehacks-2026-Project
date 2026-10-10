@@ -1,7 +1,8 @@
 """
-One-time setup: download FEMA's National Risk Index county table to data/nri_counties.csv.
+One-time setup: download FEMA's National Risk Index county table to data/nri_counties.csv
+(next to this file).
 
-    python scripts/download_nri.py
+    python -m stormsignal.risk.download_nri
 
 Uses FEMA's public ArcGIS service for the NRI (no key needed) and keeps only the
 columns this project uses, so the CSV is small enough to commit to the repo.
@@ -41,7 +42,7 @@ FIELDS = ["STCOFIPS", "STATE", "STATEABBRV", "COUNTY", "RISK_SCORE", "RISK_RATNG
     f"{h}_{s}" for h in HAZARDS for s in ("RISKS", "RISKR")
 ]
 PAGE = 1000
-OUT = Path(__file__).resolve().parent.parent / "data" / "nri_counties.csv"
+OUT = Path(__file__).resolve().parent / "data" / "nri_counties.csv"
 
 
 def main() -> None:

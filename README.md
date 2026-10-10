@@ -69,7 +69,7 @@ The AI does two jobs that code can't: **understanding how real people describe t
 ## Tech stack
 
 - **Python** with **Streamlit** for the web app
-- **Featherless.ai** (open-source LLMs) via the `openai` Python client
+- **Groq** (open-weight `gpt-oss-120b` model) via the `groq` Python client
 - **Pydantic** to validate AI output
 - **FEMA National Risk Index** for location risk data
 - **pytest** for the safety rules
@@ -77,30 +77,36 @@ The AI does two jobs that code can't: **understanding how real people describe t
 ## Project structure
 
 ```
-stormsignal/
-├── app.py            # Streamlit app
-├── llm.py            # Featherless client
-├── schemas.py        # Pydantic models (profile, plan)
-├── risk.py           # Location → top hazards
-├── intake.py         # AI: description → profile + follow-up questions
-├── rules.py          # Safety rules + rules engine
-├── plan.py           # AI plan writer + verifier
-├── data/             # National Risk Index data
-└── tests/            # Rule tests and persona tests
+├── app.py                  # Streamlit app: streamlit run app.py
+├── stormsignal/
+│   ├── risk/               # Module 1: location → top hazards (FEMA National Risk Index)
+│   │   └── data/           #   NRI county data (download_nri.py refreshes it)
+│   ├── intake/             # Module 2 (AI): description → household profile + follow-up questions
+│   ├── rules/              # Module 3: safety rules → must do / never do / gaps / sources
+│   ├── plan/               # Module 4 (AI): rules output → personal plan
+│   └── verifier/           # Module 5: checks the plan against the rules, falls back if unsafe
+├── frontend/               # Module 6: Streamlit screens (api_stub.py connects the modules)
+├── samples/                # Example inputs and outputs for each module, UI mock data
+├── tests/                  # All tests: python -m pytest
+├── docs/                   # Test personas
+└── scripts/check_groq.py   # Checks your API key works
 ```
 
 ## Getting started
 
 ```bash
-git clone https://github.com/<your-org>/stormsignal.git
-cd stormsignal
+git clone https://github.com/devarshi-ap/Forgehacks-2026-Project.git
+cd Forgehacks-2026-Project
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Create a `.env` file:
+Create a `.env` file in the project folder (never commit it):
 
 ```
-FEATHERLESS_API_KEY=your_key_here
+GROQ_API_KEY=your_key_here
+GROQ_MODEL=openai/gpt-oss-120b
 ```
 
 Run the app:
@@ -109,10 +115,21 @@ Run the app:
 streamlit run app.py
 ```
 
-Run the tests:
+Run the tests (no API key or internet needed):
 
 ```bash
-pytest
+python -m pytest
+```
+
+Try each module on its own:
+
+```bash
+python -m stormsignal.risk "Miami, FL"                                  # Module 1 (needs internet)
+python -c "from stormsignal.intake import analyze_household as a; print(a('I live alone and use a wheelchair.'))"   # Module 2 (needs key)
+python -m stormsignal.rules samples/rules/miami_wheelchair.json        # Module 3
+python -c "import json; from stormsignal.plan import build_plan; print(build_plan(json.load(open('samples/plan/module4_input_example.json')))['markdown'])"   # Module 4
+python -m stormsignal.verifier samples/verifier/good_plan.md samples/verifier/rules_example.json   # Module 5
+python scripts/check_groq.py                                            # check your API key
 ```
 
 ## Testing

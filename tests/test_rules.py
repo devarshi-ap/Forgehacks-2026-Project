@@ -15,7 +15,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import rules  # noqa: E402
+from stormsignal.rules import rules  # noqa: E402
 
 MIAMI = ["hurricane", "flood", "heat"]
 
@@ -311,8 +311,7 @@ def test_uncovered_needs_pass_through_for_module4():
 # ---- contract with Module 5 (verifier) -------------------------------------------
 
 def test_output_works_with_the_verifier():
-    """Runs only once verifier.py is merged in (branch module5-verifier)."""
-    verifier = pytest.importorskip("verifier")
+    from stormsignal.verifier import verifier
     result = rules.evaluate(MIAMI, profile(mobility="powered_wheelchair", floor=3, drives=False))
     good = "\n".join(f"- {m['action']} [{m['rule_id']}]" for m in result["must_do"])
     assert verifier.verify_plan(good, result)["passed"] is True
@@ -343,14 +342,11 @@ def test_each_tag_changes_the_plan(tag):
     assert with_tag - baseline, f"{tag} fires no extra rule"
 
 
-def test_need_tags_match_module2_schema_when_available():
-    """Runs only once schemas.py from module2-profile-coverage is merged in."""
-    schemas = pytest.importorskip("schemas")
-    if not hasattr(schemas, "NEED_TAGS"):
-        pytest.skip("older schemas.py without need tags")
+def test_need_tags_match_module2_schema():
+    """Module 2 (intake) and Module 3 (rules) must use the same tag list."""
+    from stormsignal.intake import schemas
     assert tuple(schemas.NEED_TAGS) == rules.NEED_TAGS
-    if hasattr(schemas, "CMIST"):
-        assert {g: tuple(v) for g, v in schemas.CMIST.items()} == rules.CMIST
+    assert {g: tuple(v) for g, v in schemas.CMIST.items()} == rules.CMIST
 
 
 def test_household_with_mom_dad_and_son():
