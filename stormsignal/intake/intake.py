@@ -59,7 +59,7 @@ The profile contains:
 - lives_alone
 - home type
 - home floor
-- whether the home is below ground (basement)
+- whether they live below ground (e.g. a basement apartment)
 - whether the home has a lift
 - whether the lift needs electricity
 - whether the person uses a wheelchair
@@ -98,6 +98,8 @@ Maintaining health (what keeps them well):
 - pregnant
 
 Independence (aids they rely on):
+- wheelchair: uses a manual wheelchair, or a wheelchair of unstated type
+- powered_wheelchair: uses a powered/electric wheelchair or mobility scooter
 - walker_cane_or_crutches: uses a walker, cane, crutches or rollator
 - everyday_aids: glasses, hearing aids, prosthetics or other aids that
   need spares or batteries
@@ -120,7 +122,12 @@ Transportation:
 Put a tag on the person it belongs to: the user's own needs go in
 "needs", everyone else goes in "others" as
 {"who": "mom", "age": 78, "needs": [...]}.
-A wheelchair still goes in mobility, not in needs.
+The user's OWN wheelchair goes in mobility. Anyone else's wheelchair is
+a tag on that person (wheelchair or powered_wheelchair).
+
+home.below_ground is true only if they live or sleep below ground,
+e.g. a basement apartment. A house that has a basement is NOT below
+ground (false). If it is not stated, use null.
 
 If something matters for safety but fits no tag, add a short phrase
 in the user's words to uncovered_needs (e.g. "son runs away when

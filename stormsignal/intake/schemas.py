@@ -25,6 +25,8 @@ CMIST = {
         "pregnant",
     ),
     "Independence": (
+        "wheelchair",
+        "powered_wheelchair",
         "walker_cane_or_crutches",
         "everyday_aids",
         "service_animal",
