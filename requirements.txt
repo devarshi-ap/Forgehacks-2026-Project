@@ -1,7 +1,11 @@
-fastapi
-uvicorn[standard]
-pydantic
-python-dotenv
-httpx
-pandas
-groq
+   pandas
+   requests
+   pydantic
+   openai
+   streamlit
+   python-dotenv
+   pytest
+   fastapi
+   uvicorn[standard]
+   httpx
+   groq

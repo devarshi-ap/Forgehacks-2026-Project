@@ -1,0 +1,27 @@
+{
+  "_note": "EXAMPLE DATA for building the UI. Kesava's AI 1 (Intake) will return this same shape.",
+  "profile": {
+    "location": "New York City, United States",
+    "summary": "New York City · Living alone · 3rd floor · Wheelchair user · Lift needs electricity",
+    "age": null,
+    "lives_alone": true,
+    "home": { "type": "apartment", "floor": 3, "has_lift": true, "lift_needs_electricity": true },
+    "mobility": { "uses_wheelchair": true, "wheelchair_type": null },
+    "medical_equipment": [],
+    "has_car": null
+  },
+  "followups": [
+    {
+      "id": "wheelchair_type",
+      "question": "Is your wheelchair powered or manual?",
+      "helper": "This helps us include power and charging needs.",
+      "options": ["Powered wheelchair", "Manual wheelchair", "Prefer not to say"]
+    },
+    {
+      "id": "helper_nearby",
+      "question": "Is someone nearby able to help you leave?",
+      "helper": "Think of someone you could contact before an emergency.",
+      "options": ["Yes, we have agreed a plan", "Not yet — I need to arrange help", "I’m not sure"]
+    }
+  ]
+}
