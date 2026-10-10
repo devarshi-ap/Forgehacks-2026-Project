@@ -5,9 +5,9 @@ so the screens do not care whether the data is mock or real.
 """
 import streamlit as st
 
-import api_stub
-import components as C
-from components import esc, icon, md
+from frontend import api_stub
+from frontend import components as C
+from frontend.components import esc, icon, md
 
 EXAMPLE = {
     "city": "New York City",

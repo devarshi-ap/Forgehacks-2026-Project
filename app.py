@@ -1,14 +1,12 @@
 """Run this file to see the three screens with mock data:
 
-    streamlit run frontend/demo_app.py
+    streamlit run app.py
 
-(run the command from the project's MAIN folder, so .streamlit/config.toml is found)
+(run the command from the project's main folder, so .streamlit/config.toml is found)
 """
 import streamlit as st
 
-import components
-import screens
-import styles
+from frontend import components, screens, styles
 
 st.set_page_config(page_title="StormSignal", page_icon="🌩️", layout="wide",
                    initial_sidebar_state="expanded")

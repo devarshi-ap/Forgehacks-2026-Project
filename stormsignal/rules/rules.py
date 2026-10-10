@@ -40,7 +40,7 @@ The verifier lets a phrase through only when a negation sits right before it, so
 "Do not go to the basement" passes but "Never, ever, go to the basement" does not.
 
 Run it from the terminal:
-    python rules.py samples/rules/miami_wheelchair.json
+    python -m stormsignal.rules samples/rules/miami_wheelchair.json
 """
 
 from __future__ import annotations
@@ -708,10 +708,15 @@ def evaluate(risks, profile) -> dict:
     }
 
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("usage: python rules.py INPUT.json   (INPUT has \"risks\" and \"profile\")")
-        sys.exit(2)
-    with open(sys.argv[1], encoding="utf-8") as f:
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        print("usage: python -m stormsignal.rules INPUT.json   (INPUT has \"risks\" and \"profile\")")
+        return 2
+    with open(argv[1], encoding="utf-8") as f:
         data = json.load(f)
     print(json.dumps(evaluate(data["risks"], data["profile"]), indent=2, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

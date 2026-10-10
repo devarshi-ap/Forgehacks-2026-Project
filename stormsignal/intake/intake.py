@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from groq import Groq
 
-from schemas import NEED_TAGS, IntakeAIResult
+from .schemas import NEED_TAGS, IntakeAIResult
 
 
 # ---------------------------------------------------------

@@ -13,15 +13,13 @@ Sample counties and their expected top 3 (scores in brackets):
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-import risk
+from stormsignal.risk import download_nri, risk
 
-ROOT = Path(__file__).resolve().parent.parent
 SAMPLE = Path(__file__).parent / "fixtures" / "nri_sample.csv"
 
 
@@ -46,10 +44,6 @@ def fake_geocoder(monkeypatch, place: dict, fips: str | None):
 
 def test_every_hazard_code_is_downloaded():
     """If risk.py uses a code that download_nri.py doesn't fetch, that hazard can never appear."""
-    spec = importlib.util.spec_from_file_location("download_nri", ROOT / "scripts" / "download_nri.py")
-    download_nri = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(download_nri)
-
     used = {code for codes in risk.HAZARD_CODES.values() for code in codes}
     legacy = {"RFLD"}  # older FEMA name for inland flooding; intentionally not downloaded
     missing = used - legacy - set(download_nri.HAZARDS)

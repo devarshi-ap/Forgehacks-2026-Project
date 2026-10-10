@@ -26,8 +26,8 @@ A hurricane score of 95 means "this county's hurricane risk is higher than
 unusually exposed to compared with the rest of the country.
 
 Run it from the terminal:
-    python risk.py "Miami, FL"
-    python risk.py 77002
+    python -m stormsignal.risk "Miami, FL"
+    python -m stormsignal.risk 77002
 """
 
 from __future__ import annotations
@@ -152,7 +152,7 @@ def load_nri(path: str | Path = NRI_CSV) -> pd.DataFrame:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(
-            f"{path} not found. Run `python scripts/download_nri.py` once to create it."
+            f"{path} not found. Run `python -m stormsignal.risk.download_nri` once to create it."
         )
     df = pd.read_csv(path, dtype={"STCOFIPS": str})
     df["STCOFIPS"] = df["STCOFIPS"].str.zfill(5)
@@ -240,12 +240,17 @@ def get_top_risks(location: str, n: int = 3, nri_path: str | Path = NRI_CSV) -> 
     }
 
 
-if __name__ == "__main__":
+def main(argv: list[str]) -> int:
     import json
 
-    query = " ".join(sys.argv[1:]) or "Miami, FL"
+    query = " ".join(argv[1:]) or "Miami, FL"
     try:
         print(json.dumps(get_top_risks(query), indent=2))
     except LocationNotFound as e:
         print(f"Error: {e}")
-        sys.exit(1)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -1,11 +1,12 @@
-   pandas
-   requests
-   pydantic
-   openai
-   streamlit
-   python-dotenv
-   pytest
-   fastapi
-   uvicorn[standard]
-   httpx
-   groq
+# Core modules
+pandas
+requests
+pydantic
+python-dotenv
+groq
+
+# App (Module 6)
+streamlit>=1.40
+
+# Tests
+pytest
