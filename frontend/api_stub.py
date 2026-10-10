@@ -33,6 +33,9 @@ except Exception as e:  # no GROQ_API_KEY, broken import, ...
     _module2_intake = None
     print(f"[api_stub] Module 2 not available, using mock intake: {e}")
 
+# ---- Module 3: rules (also picks the follow-up questions) -------------------
+from stormsignal.rules import apply_answers, open_questions
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -74,6 +77,8 @@ def _clean_followups(followups) -> list:
         if " " not in helper:  # Module 2 sometimes returns an id like "lift_presence"
             helper = ""
         options = [o[:1].upper() + o[1:] for o in (f.get("options") or [])]
+        if len(options) < 2:  # an open question ("Which floor?") can't be shown as radio buttons
+            continue
         cleaned.append(
             {
                 "id": f.get("id", ""),
@@ -140,9 +145,10 @@ def analyze_household(location: str, description: str) -> dict:
     location = _clean_location(location)
 
     # Module 1 checks the place first, so the user sees its error text.
+    risks = []
     if get_top_risks is not None and location:
         try:
-            _risks(location)
+            risks = _risks(location)["risks"]
         except LocationNotFound as e:
             raise ValueError(str(e)) from e
         except Exception as e:  # network down etc.: keep going with the demo
@@ -161,7 +167,15 @@ def analyze_household(location: str, description: str) -> dict:
     profile = dict(result["profile"])
     profile["location"] = location or profile.get("location", "")
     profile["summary"] = _summary(profile)
-    return {"profile": profile, "followups": _clean_followups(result.get("followups"))}
+
+    # The rules engine picks the questions whose answers would change this plan the most,
+    # each with fixed options. The AI's own questions are only a fallback.
+    try:
+        followups = open_questions(risks, profile)
+    except Exception as e:
+        print(f"[api_stub] Module 3 could not pick questions, using the AI's: {e}")
+        followups = _clean_followups(result.get("followups"))
+    return {"profile": profile, "followups": followups}
 
 
 def build_plan(profile: dict, answers: dict) -> dict:
@@ -169,8 +183,9 @@ def build_plan(profile: dict, answers: dict) -> dict:
 
     Right now only the location and the risk cards are real (Module 1).
     Gaps, checklist, comparison, sources and the verifier still come from
-    mock_data/plan_example.json until Modules 3, 4 and 5 are connected.
+    samples/ui/plan_example.json until Modules 3, 4 and 5 are connected.
     """
+    profile = apply_answers(profile, answers)  # follow-up answers fill in the unknowns
     plan = _load("plan_example.json")
 
     location = (profile or {}).get("location")
