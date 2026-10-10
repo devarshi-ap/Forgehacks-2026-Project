@@ -1,9 +1,11 @@
 """Bridge between the Streamlit screens and the real modules.
 
-Module 1 (stormsignal.risk)   -> real, live (needs internet, no key)
-Module 2 (stormsignal.intake) -> real if GROQ_API_KEY is set,
-                                 otherwise the mock intake is used
-Modules 3, 4, 5               -> still mock (samples/ui/plan_example.json)
+Module 1 (stormsignal.risk)     -> real, live (needs internet, no key)
+Module 2 (stormsignal.intake)   -> real if GROQ_API_KEY is set, otherwise the mock intake
+Module 3 (stormsignal.rules)    -> real; also picks the follow-up questions
+Module 4 (stormsignal.plan)     -> real; AI-written if GROQ_API_KEY is set, else rules-based
+Module 5 (stormsignal.verifier) -> real; unsafe AI plans are rewritten once, then replaced
+If anything in 3-5 fails, the mock plan (samples/ui/plan_example.json) is shown instead.
 
 The screens only call analyze_household() and build_plan(); their return
 shapes do not change.
@@ -33,8 +35,10 @@ except Exception as e:  # no GROQ_API_KEY, broken import, ...
     _module2_intake = None
     print(f"[api_stub] Module 2 not available, using mock intake: {e}")
 
-# ---- Module 3: rules (also picks the follow-up questions) -------------------
-from stormsignal.rules import apply_answers, open_questions
+# ---- Modules 3, 4, 5: rules, plan writer, verifier (plain Python, always importable)
+from stormsignal.plan import build_plan as _module4_plan
+from stormsignal.rules import apply_answers, evaluate, open_questions
+from stormsignal.verifier import finalize
 
 
 # ---------------------------------------------------------------------------
@@ -181,21 +185,96 @@ def analyze_household(location: str, description: str) -> dict:
 def build_plan(profile: dict, answers: dict) -> dict:
     """Rules engine + AI 3 (Plan writer) + Verifier: build the personal plan.
 
-    Right now only the location and the risk cards are real (Module 1).
-    Gaps, checklist, comparison, sources and the verifier still come from
-    samples/ui/plan_example.json until Modules 3, 4 and 5 are connected.
+    Returns the plan JSON the results screen expects (see samples/ui/plan_example.json),
+    plus "plan_markdown" (the checked plan) and "verifier" {"status": "pass"|"fallback"}.
     """
     profile = apply_answers(profile, answers)  # follow-up answers fill in the unknowns
-    plan = _load("plan_example.json")
-
     location = (profile or {}).get("location")
+    data = None
     if get_top_risks is not None and location:
         try:
             data = _risks(location)
+        except Exception as e:
+            print(f"[api_stub] Module 1 failed in build_plan: {e}")
+
+    try:
+        plan = _real_plan(profile, data)
+    except Exception as e:  # never let a bug in 3-5 break the demo
+        print(f"[api_stub] Modules 3-5 failed, using the mock plan: {e}")
+        plan = _load("plan_example.json")
+        if data:
             place = data["location"]
             plan["location"] = f"{place['name']}, {place['state']}"
             plan["top_risks"] = _risk_cards(data["risks"], place["county"])
-        except Exception as e:
-            print(f"[api_stub] Module 1 failed in build_plan, using mock risks: {e}")
+    return plan
 
+
+WHEN_ORDER = ["This week", "When a warning is issued", "During the event"]
+
+
+def _whom(names) -> str:
+    names = ["you" if n == "you" else n for n in names or []]
+    return ", ".join(names)
+
+
+def _real_plan(profile: dict, data: dict | None) -> dict:
+    risks = data["risks"] if data else []
+    rules = evaluate(risks, profile)  # Module 3
+
+    # Module 4 sees needs, not the raw description (privacy), plus the rules output.
+    plan_input = {
+        "profile": {"household_needs": rules["household_needs"],
+                    "uncovered_needs": rules["uncovered_needs"],
+                    "summary": profile.get("summary", "")},
+        "top_risks": risks,
+        "module3_output": rules,
+    }
+    draft = _module4_plan(plan_input, use_groq=True)
+
+    def rewrite(_plan_markdown, feedback):
+        return _module4_plan(plan_input, use_groq=True, feedback=feedback)["markdown"]
+
+    checked = finalize(draft["markdown"], rules, rewrite_fn=rewrite)  # Module 5
+
+    by_rank = sorted(rules["gaps"], key=lambda g: g["rank"])[:3]
+    gaps = [{
+        "rank": n,
+        "title": g["message"],
+        "why": f"For {_whom(g['for_whom'])}." if g["for_whom"] else "This affects your whole household.",
+        "fix": g["fix"],
+        "source_ids": [g["source_id"]],
+    } for n, g in enumerate(by_rank, start=1)]
+
+    steps = sorted(rules["must_do"], key=lambda m: (WHEN_ORDER.index(m["when"]) if m["when"] in WHEN_ORDER
+                                                     else len(WHEN_ORDER), m["priority"]))
+    checklist = [{
+        "id": m["rule_id"],
+        "when": m["when"],
+        "step": m["action"] + (f" (for {_whom(m['for_whom'])})" if m["for_whom"] and m["for_whom"] != ["you"] else ""),
+        "source_ids": [m["source_id"]],
+    } for m in steps]
+
+    top = gaps[0]["title"].lower() if gaps else "the steps below"
+    summary = (f"{len(checklist)} steps for your household, based on {len(rules['sources'])} official "
+               f"sources. Start with: {top}.")
+
+    plan = {
+        "is_demo": False,
+        "location": profile.get("location", ""),
+        "top_risks": [],
+        "summary": summary,
+        "gaps": gaps,
+        "checklist": checklist,
+        "comparison": [],
+        "sources": rules["sources"],
+        "plan_markdown": checked["final_plan"],
+        "verifier": {"status": "pass" if checked["passed"] else "fallback",
+                     "note": "" if checked["passed"] else
+                     f"missing: {checked['missing_rules']}, forbidden: {checked['forbidden_found']}"},
+        "generation_method": draft.get("generation_method", "rules"),
+    }
+    if data:
+        place = data["location"]
+        plan["location"] = f"{place['name']}, {place['state']}"
+        plan["top_risks"] = _risk_cards(data["risks"], place["county"])
     return plan

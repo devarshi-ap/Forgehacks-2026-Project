@@ -19,13 +19,45 @@ GROQ_MODEL = os.getenv(
 ).strip()
 
 
+HAZARD_LABELS = {
+    "hurricane": "Hurricane", "flood": "Flooding", "heat": "Extreme heat",
+    "earthquake": "Earthquake", "wildfire": "Wildfire", "landslide": "Landslide",
+}
+GENERAL_SECTION = "Everyone at home"
+
+
+def _label(hazard) -> str:
+    return HAZARD_LABELS.get(str(hazard).lower(), str(hazard))
+
+
+def _from_rules_engine(module3: dict) -> list[dict]:
+    """Module 3's must_do items -> the rule shape below (one hazard each, for_whom in the text)."""
+    rules = []
+    for item in module3.get("must_do", []):
+        hazards = item.get("hazards") or []
+        action = item.get("action", "")
+        whom = [w for w in item.get("for_whom") or [] if w != "you"]
+        if whom:
+            action = f"{action} (for {', '.join(whom)})"
+        rules.append(dict(item, action=action,
+                          hazard=_label(hazards[0]) if hazards else GENERAL_SECTION))
+    return rules
+
+
+def _gap_text(gap) -> str:
+    if isinstance(gap, dict):
+        fix = f" → {gap['fix']}" if gap.get("fix") else ""
+        return f"{gap.get('message', '')}{fix}"
+    return str(gap)
+
+
 def _build_rules_plan(raw_input: dict) -> dict:
     data = PlanInput.model_validate(raw_input)
     profile = data.profile
     risks = data.top_risks
     module3 = data.module3_output
 
-    rules = module3.get("rules", module3.get("matched_rules", []))
+    rules = module3.get("rules", module3.get("matched_rules", [])) or _from_rules_engine(module3)
 
     if isinstance(rules, dict):
         rules = [
@@ -45,6 +77,7 @@ def _build_rules_plan(raw_input: dict) -> dict:
         uncovered = [uncovered]
     if isinstance(gaps, str):
         gaps = [gaps]
+    gaps = [_gap_text(gap) for gap in gaps]
 
     if not gaps:
         gaps = list(uncovered) or [
@@ -54,7 +87,7 @@ def _build_rules_plan(raw_input: dict) -> dict:
     sections = {}
 
     for rule in rules:
-        hazard = str(
+        hazard = _label(
             rule.get("hazard") or rule.get("risk") or "General safety"
         )
         rule_id = (
@@ -91,7 +124,7 @@ def _build_rules_plan(raw_input: dict) -> dict:
             )
         )
         sections.setdefault(
-            str(hazard),
+            _label(hazard),
             ["- No matching rule supplied; check official local guidance."]
         )
 
@@ -138,7 +171,10 @@ def _build_rules_plan(raw_input: dict) -> dict:
     return result.model_dump()
 
 
-def build_plan(raw_input: dict, use_groq: bool = False) -> dict:
+def build_plan(raw_input: dict, use_groq: bool = False, feedback: str | None = None) -> dict:
+    """Rules output -> plan. With use_groq the AI rewrites it in plain language; otherwise
+    (or if the AI fails) the rules-based plan is returned. `feedback` is the verifier's
+    note when it asks for a rewrite (Module 5)."""
     fallback = _build_rules_plan(raw_input)
 
     if not use_groq:
@@ -154,12 +190,24 @@ def build_plan(raw_input: dict, use_groq: bool = False) -> dict:
     try:
         client = Groq(api_key=GROQ_API_KEY)
 
+        module3 = raw_input.get("module3_output", {})
         prompt_data = {
             "profile": raw_input.get("profile", {}),
             "top_risks": raw_input.get("top_risks", []),
-            "module3_output": raw_input.get("module3_output", {}),
+            "module3_output": module3,
             "rules_based_plan": fallback["markdown"],
         }
+        required_ids = [m.get("rule_id") for m in module3.get("must_do", []) if m.get("rule_id")]
+        forbidden = module3.get("never_do", [])
+        checks = ""
+        if required_ids:
+            checks += ("\n\nEvery one of these rule IDs MUST appear in the plan as a tag in square "
+                       "brackets on its step, e.g. [PWR-WHEELCHAIR]: " + ", ".join(required_ids))
+        if forbidden:
+            checks += ("\n\nNEVER write any of these phrases anywhere in the plan, not even as a "
+                       "warning: " + "; ".join(f'"{p}"' for p in forbidden))
+        if feedback:
+            checks += "\n\nA safety check rejected your previous plan: " + feedback
 
         messages = cast(
             list[ChatCompletionMessageParam],
@@ -188,6 +236,7 @@ def build_plan(raw_input: dict, use_groq: bool = False) -> dict:
                             ensure_ascii=False,
                             indent=2,
                         )
+                        + checks
                     ),
                 },
             ],

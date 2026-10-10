@@ -3,6 +3,8 @@
 Layout and wording follow the Figma designs. All data comes from api_stub.py,
 so the screens do not care whether the data is mock or real.
 """
+import re
+
 import streamlit as st
 
 from frontend import api_stub
@@ -11,7 +13,7 @@ from frontend.components import esc, icon, md
 
 EXAMPLE = {
     "city": "New York City",
-    "country": "United States",
+    "country": "NY",  # U.S. state; the risk lookup covers U.S. counties
     "description": (
         "I live alone on the 3rd floor of an apartment building in New York City. I use a "
         "wheelchair. There is a lift, but it needs electricity. I want to know how to prepare "
@@ -44,7 +46,7 @@ def screen_intake():
         C.support("You know your situation best. Share only what you’re comfortable sharing.")
         col_city, col_country = st.columns(2)
         col_city.text_input("City", key="city", placeholder="e.g. New York City")
-        col_country.text_input("Country", key="country", placeholder="e.g. United States")
+        col_country.text_input("State", key="country", placeholder="e.g. NY")
         md('<div class="ss-label">Describe your home and your situation in your own words</div>'
            '<div class="ss-help">For example: how you get around, who lives with you, and anything you depend on.</div>')
         st.text_area("Describe your home and your situation in your own words", key="description",
@@ -62,7 +64,7 @@ def screen_intake():
         country = st.session_state["country"].strip()
         description = st.session_state["description"].strip()
         if not (city and country and description):
-            st.error("Please fill in your city, your country and a short description.")
+            st.error("Please fill in your city, your state and a short description.")
         else:
             st.session_state.update(saved_city=city, saved_country=country, saved_description=description)
         with st.spinner("Reading your description..."):
@@ -157,6 +159,16 @@ def _tab_checklist(plan, by_id):
     md('<div class="ss-warn-text">Illustrative planning only. Official instructions take priority.</div>')
 
 
+def _tab_plan(plan):
+    """The written plan from Module 4, as checked by Module 5 (or the rules-based fallback)."""
+    C.h2("Your plan, step by step")
+    if plan["verifier"]["status"] == "pass":
+        C.support("Every step is checked against the safety rules. Each [TAG] links a step to its rule.")
+    # Plain Markdown, no HTML: the AI's text can never inject markup. Shrink # and ## headings to fit the tab.
+    st.markdown(re.sub(r"^(#{1,2}) ", lambda m: "#" * (len(m.group(1)) + 2) + " ", plan["plan_markdown"],
+                       flags=re.MULTILINE))
+
+
 def _tab_compare(plan, by_id):
     C.h2("Same guidance. Your circumstances.")
     C.support("Your details make the next steps more specific. This example has not been verified for your building.")
@@ -201,13 +213,22 @@ def screen_results():
     C.h3("What matters most for you")
     C.body(plan["summary"])
 
-    tab_gaps, tab_check, tab_compare = st.tabs(["Biggest gaps", "Checklist", "Generic vs. yours"])
-    with tab_gaps:
+    names = ["Biggest gaps", "Checklist"]
+    if plan.get("plan_markdown"):
+        names.append("Your plan")
+    if plan.get("comparison"):
+        names.append("Generic vs. yours")
+    tabs = dict(zip(names, st.tabs(names)))
+    with tabs["Biggest gaps"]:
         _tab_gaps(plan, by_id)
-    with tab_check:
+    with tabs["Checklist"]:
         _tab_checklist(plan, by_id)
-    with tab_compare:
-        _tab_compare(plan, by_id)
+    if "Your plan" in tabs:
+        with tabs["Your plan"]:
+            _tab_plan(plan)
+    if "Generic vs. yours" in tabs:
+        with tabs["Generic vs. yours"]:
+            _tab_compare(plan, by_id)
 
     with st.expander("All sources", expanded=True):
         if plan.get("is_demo"):
