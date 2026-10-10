@@ -4,7 +4,7 @@
 
 ForgeHacks 2026 · AI + Climate track
 
-> Demo video: _[link]_ · Live app: _[link]_
+> Demo video: [Watch on YouTube](https://youtu.be/ZhKAcFOXxg8)
 
 ---
 
@@ -168,7 +168,6 @@ Household details are kept only for the current session and are never stored. Th
 
 ## Team
 
-- _Name_ — role
-- _Name_ — role
-- _Name_ — role
-- _Name_ — role
+- **Kavya Mutyala**: frontend, verifier and testing
+- **Kesava Koduru**: AI intake and plan writer
+- **Dev Patel**: backend and integration
