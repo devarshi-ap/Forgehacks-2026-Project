@@ -437,3 +437,95 @@ def test_accessible_transport_only_matters_when_you_might_evacuate():
     stretcher = profile(needs=["needs_accessible_transport"])
     assert "TRANS-ACCESSIBLE" in ids(rules.evaluate(["hurricane"], stretcher))
     assert "TRANS-ACCESSIBLE" not in ids(rules.evaluate(["earthquake"], stretcher))
+
+
+# ---- wheelchairs for anyone at home ----------------------------------------------
+
+def test_someone_elses_wheelchair_counts():
+    result = rules.evaluate(["earthquake"], profile(others=[{"who": "grandpa", "needs": ["powered_wheelchair"]}]))
+    assert for_whom(result, "PWR-WHEELCHAIR") == ["grandpa"]
+    assert for_whom(result, "EQ-LOCK-COVER") == ["grandpa"]
+    assert "EQ-DROP-COVER" in ids(result)  # everyone else still drops, covers and holds on
+
+
+def test_user_wheelchair_becomes_a_tag():
+    assert rules.normalize_profile({"mobility": "powered_wheelchair"})["needs"] == {"powered_wheelchair": ["you"]}
+    assert rules.normalize_profile({"mobility": "manual_wheelchair"})["needs"] == {"wheelchair": ["you"]}
+
+
+def test_evacuation_help_names_who_needs_it():
+    result = rules.evaluate(["flood"], profile(floor=4, others=[{"who": "dad", "needs": ["walker_cane_or_crutches"]}]))
+    assert for_whom(result, "EVAC-HELP") == ["dad"]
+
+
+def test_house_with_a_basement_is_not_below_ground():
+    assert rules.normalize_profile({"housing": "detached house with basement"})["below_ground"] is None
+    assert rules.normalize_profile({"housing": "basement suite"})["below_ground"] is True
+
+
+# ---- follow-up questions -------------------------------------------------------------
+
+BUG_REPORT_HOUSEHOLD = {  # "mom, dad and grandpa, detached home with basement, 3 cars, grandpa's wheelchair..."
+    "lives_alone": False,
+    "home": {"type": "detached house", "floor": None, "has_lift": None, "below_ground": False},
+    "mobility": {"uses_wheelchair": None, "wheelchair_type": None},
+    "has_car": True, "helper_nearby": None, "has_backup_power": None, "has_ac": None,
+    "others": [{"who": "mom", "needs": ["special_diet_or_allergy"]},
+               {"who": "dad", "needs": []},
+               {"who": "grandpa", "needs": ["wheelchair", "daily_medication"]}],
+}
+
+
+def test_every_question_has_options_to_pick():
+    """Regression: the AI once asked "Which floor?" with no options, leaving an empty radio group."""
+    for risks in (MIAMI, ["earthquake"], []):
+        for household in (BUG_REPORT_HOUSEHOLD, MODULE2_NESTED, profile(), profile(mobility="wheelchair")):
+            for q in rules.open_questions(risks, household, limit=10):
+                assert len(q["options"]) >= 2 and q["question"] and q["id"], q
+
+
+def test_questions_for_the_bug_report_household():
+    qs = rules.open_questions(MIAMI, BUG_REPORT_HOUSEHOLD)
+    assert [q["id"] for q in qs] == ["powered_wheelchair:grandpa", "has_ac"]
+    assert qs[0]["question"] == "Is grandpa's wheelchair powered or manual?"
+
+
+def test_questions_follow_the_most_urgent_gap():
+    qs = rules.open_questions(["hurricane"], profile(mobility="powered_wheelchair"))
+    assert qs[0]["id"] == "has_backup_power"   # gap priority 1
+
+
+def test_known_facts_are_never_asked():
+    known = profile(mobility="powered_wheelchair", has_backup_power=True, drives=True, has_ac=True,
+                    helper_nearby=True)
+    assert rules.open_questions(MIAMI, known, limit=10) == []
+
+
+def test_question_limit():
+    assert len(rules.open_questions(MIAMI, profile(mobility="wheelchair"), limit=1)) == 1
+
+
+def test_answers_fill_in_the_profile():
+    answered = rules.apply_answers(BUG_REPORT_HOUSEHOLD, {
+        "powered_wheelchair:grandpa": "Powered (needs charging)", "has_ac": "No", "has_backup_power": "Yes"})
+    grandpa = next(m for m in answered["others"] if m["who"] == "grandpa")
+    assert "powered_wheelchair" in grandpa["needs"] and "wheelchair" not in grandpa["needs"]
+    assert answered["has_ac"] is False and answered["has_backup_power"] is True
+    assert BUG_REPORT_HOUSEHOLD["others"][2]["needs"] == ["wheelchair", "daily_medication"]  # input untouched
+    result = rules.evaluate(MIAMI, answered)
+    assert for_whom(result, "PWR-WHEELCHAIR") == ["grandpa"]
+    assert "No air conditioning at home" in gap_messages(result)
+    assert "No backup charging for your wheelchair" not in gap_messages(result)
+
+
+def test_unsure_and_unanswered_change_nothing():
+    answers = {"has_ac": "Not sure", "helper_nearby": "Not answered", "made_up": "Yes",
+               "powered_wheelchair:grandpa": "Not sure"}
+    assert rules.apply_answers(BUG_REPORT_HOUSEHOLD, answers) == BUG_REPORT_HOUSEHOLD
+
+
+def test_answers_work_on_flat_and_nested_profiles():
+    flat = rules.apply_answers(profile(mobility="wheelchair"), {"powered_wheelchair:you": "Manual", "drives": "No"})
+    assert flat["mobility"] == "manual_wheelchair" and flat["drives"] is False
+    nested = rules.apply_answers(MODULE2_NESTED, {"powered_wheelchair:you": "Manual", "drives": "Yes"})
+    assert nested["mobility"]["wheelchair_type"] == "manual" and nested["has_car"] is True

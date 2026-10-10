@@ -45,6 +45,7 @@ Run it from the terminal:
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 import sys
@@ -141,6 +142,8 @@ CMIST = {
         "pregnant",
     ),
     "Independence": (
+        "wheelchair",
+        "powered_wheelchair",
         "walker_cane_or_crutches",
         "everyday_aids",
         "service_animal",
@@ -257,10 +260,14 @@ def normalize_profile(profile) -> dict:
     for key in ("power_medical", "fridge_meds", "pets", "uncovered_needs"):
         p[key] = _as_list(p[key])
     if p["below_ground"] is None:
+        # A basement apartment counts; a house that merely has a basement does not.
         housing_text = str(raw.get("housing") or "").lower()
-        if (p["floor"] is not None and p["floor"] < 0) or "basement" in housing_text:
+        if (p["floor"] is not None and p["floor"] < 0) or re.search(
+                r"basement (apartment|suite|unit|flat|room)|^basement$|below ground", housing_text):
             p["below_ground"] = True
     p["needs"] = _collect_needs(raw, p)
+    p["people"] = ["you"] + [str(m.get("who") or "").strip() or "someone at home"
+                             for m in raw.get("others") or [] if isinstance(m, dict)]
     return p
 
 
@@ -301,6 +308,10 @@ def _collect_needs(raw: dict, p: dict) -> dict[str, list[str]]:
         add("refrigerated_medication", "you")
     if p["mobility"] == "walker_or_cane":
         add("walker_cane_or_crutches", "you")
+    if p["mobility"] == "powered_wheelchair":
+        add("powered_wheelchair", "you")
+    elif p["mobility"] in ("wheelchair", "manual_wheelchair"):
+        add("wheelchair", "you")
 
     for member in raw.get("others") or []:
         if not isinstance(member, dict):
@@ -313,16 +324,25 @@ def _collect_needs(raw: dict, p: dict) -> dict[str, list[str]]:
 
 
 # Small, readable conditions the rules are built from.
+WHEELCHAIR_TAGS = ("wheelchair", "powered_wheelchair")
+MOBILITY_TAGS = WHEELCHAIR_TAGS + ("walker_cane_or_crutches",)
+
+
+def wheelchair_users(p) -> list[str]:
+    return _unique(who for tag in WHEELCHAIR_TAGS for who in p["needs"].get(tag, []))
+
+
 def uses_wheelchair(p) -> bool:
-    return p["mobility"] in ("wheelchair", "manual_wheelchair", "powered_wheelchair")
+    """Someone at home uses a wheelchair."""
+    return bool(wheelchair_users(p))
 
 
 def limited_mobility(p) -> bool:
-    return uses_wheelchair(p) or "walker_cane_or_crutches" in p["needs"]
+    return any(tag in p["needs"] for tag in MOBILITY_TAGS)
 
 
 def needs_power(p) -> bool:
-    return p["mobility"] == "powered_wheelchair" or "power_dependent_device" in p["needs"]
+    return "powered_wheelchair" in p["needs"] or "power_dependent_device" in p["needs"]
 
 
 def above_ground(p) -> bool:
@@ -347,6 +367,7 @@ class Gap:
     missing: Callable[[dict], bool]   # profile -> is this thing missing?
     message: str
     fix: str
+    asks: tuple[str, ...] = ()        # profile facts that would settle it, if unknown (see QUESTIONS)
 
 
 @dataclass(frozen=True)
@@ -389,13 +410,15 @@ RULES: list[Rule] = [
          "READY-KIT", WHEN_NOW, 4),
 
     # ---- power-dependent ----------------------------------------------------
-    Rule("PWR-WHEELCHAIR", (), lambda p, h: p["mobility"] == "powered_wheelchair",
+    Rule("PWR-WHEELCHAIR", (), always,
          "Plan backup charging for your powered wheelchair: a spare battery or charger, and a place "
          "with power you can get to if the electricity goes out.",
          "READY-DISABILITY", WHEN_NOW, 1,
          gap=Gap(lambda p: not_yes(p["has_backup_power"]),
                  "No backup charging for your wheelchair",
-                 "Get a backup battery, or find a nearby place with power where you can recharge.")),
+                 "Get a backup battery, or find a nearby place with power where you can recharge.",
+                 asks=("has_backup_power",)),
+         needs=("powered_wheelchair",)),
     Rule("PWR-MEDICAL", (), always,
          "Make a backup power plan for your medical equipment: extra batteries, ask your power company "
          "about its medical-needs list, and know where you can go early to get power.",
@@ -403,7 +426,8 @@ RULES: list[Rule] = [
          gap=Gap(lambda p: not_yes(p["has_backup_power"]),
                  "Your medical equipment has no backup power",
                  "Get backup batteries, register with your power company's medical-needs program, and "
-                 "pick a place with power you can go to before an outage."),
+                 "pick a place with power you can go to before an outage.",
+                 asks=("has_backup_power",)),
          needs=("power_dependent_device",)),
     Rule("PWR-GENERATOR", (), lambda p, h: needs_power(p) or "hurricane" in h,
          "If you use a generator, keep it outdoors and well away from windows and doors, because its "
@@ -418,18 +442,21 @@ RULES: list[Rule] = [
          gap=Gap(lambda p: not_yes(p["has_backup_power"]),
                  "No way to keep your medicine cold in an outage",
                  "Keep a cooler and ice packs ready, and ask your pharmacist how long your medicine "
-                 "stays safe unrefrigerated."),
+                 "stays safe unrefrigerated.",
+                 asks=("has_backup_power",)),
          needs=("refrigerated_medication",)),
 
     # ---- getting out --------------------------------------------------------
-    Rule("EVAC-HELP", (), lambda p, h: limited_mobility(p) and above_ground(p),
+    Rule("EVAC-HELP", (), lambda p, h: above_ground(p),
          "Agree in advance who will help you leave your building if the elevator stops, and practise "
          "the route with them.",
          "READY-DISABILITY", WHEN_NOW, 2,
          gap=Gap(lambda p: not_yes(p["helper_nearby"]),
                  "No agreed way to leave without the elevator",
                  "Ask a neighbour, friend or building manager to be your evacuation helper, and agree a "
-                 "backup contact.")),
+                 "backup contact.",
+                 asks=("helper_nearby",)),
+         needs=MOBILITY_TAGS),
     Rule("EVAC-TRANSPORT", ("hurricane", "flood", "wildfire"), lambda p, h: not_yes(p["drives"]),
          "Plan how you will leave without driving: register with your local evacuation-assistance "
          "program or arrange a ride, and leave as soon as officials advise.",
@@ -437,7 +464,8 @@ RULES: list[Rule] = [
          gap=Gap(lambda p: not_yes(p["drives"]) and not_yes(p["helper_nearby"]),
                  "No way to evacuate without a car",
                  "Register with your county's evacuation-assistance program, or arrange a ride with "
-                 "someone who drives before a warning is issued.")),
+                 "someone who drives before a warning is issued.",
+                 asks=("drives", "helper_nearby"))),
     Rule("TRANS-ACCESSIBLE", ("hurricane", "flood", "wildfire"), always,
          "Arrange accessible transport for evacuation in advance, such as your local paratransit or "
          "evacuation-assistance program, because an ordinary car or bus may not work.",
@@ -522,7 +550,8 @@ RULES: list[Rule] = [
          gap=Gap(lambda p: not_yes(p["helper_nearby"]),
                  "No backup caregiver",
                  "Ask a family member, neighbour or your care agency who would step in if the usual "
-                 "caregiver cannot come."),
+                 "caregiver cannot come.",
+                 asks=("helper_nearby",)),
          needs=("needs_personal_care",)),
     Rule("FAMILY-BABY", (), always,
          "Pack supplies for babies, young children or pregnancy in your kit, such as formula, diapers "
@@ -562,7 +591,7 @@ RULES: list[Rule] = [
          "READY-FLOOD", WHEN_WARNING, 1,
          never_do=("stay in the basement", "sleep in the basement"),
          gap=Gap(lambda p: True,
-                 "Your home is below ground",
+                 "You live below ground",
                  "Agree now where above ground you will go during a flood warning, and how to get there.")),
     Rule("FLOOD-TADD", ("flood",), always,
          "Turn around, don't drown: stay out of flood water on foot or in a car. Just six inches of "
@@ -579,13 +608,15 @@ RULES: list[Rule] = [
          gap=Gap(lambda p: not_yes(p["has_ac"]),
                  "No air conditioning at home",
                  "Find your nearest cooling center or an air-conditioned place you can reach, and plan "
-                 "how to get there.")),
+                 "how to get there.",
+                 asks=("has_ac",))),
     Rule("HEAT-CHECKIN", ("heat",), lambda p, h: p["lives_alone"] is True,
          "Set up a daily check-in with a neighbour, friend or family member during heat alerts.",
          "READY-HEAT", WHEN_NOW, 3,
          gap=Gap(lambda p: not_yes(p["helper_nearby"]),
                  "No one checks on you",
-                 "Ask a neighbour or friend to check on you every day during heat alerts.")),
+                 "Ask a neighbour or friend to check on you every day during heat alerts.",
+                 asks=("helper_nearby",))),
     Rule("HEAT-HIGH-RISK", ("heat",), always,
          "Older adults, young children, pregnant people and people with lung conditions get sick "
          "from heat faster: keep them somewhere cool during heat warnings and check on them often.",
@@ -597,15 +628,16 @@ RULES: list[Rule] = [
          "READY-HEAT", WHEN_WARNING, 4),
 
     # ---- earthquake ---------------------------------------------------------
-    Rule("EQ-DROP-COVER", ("earthquake",), lambda p, h: not uses_wheelchair(p),
+    Rule("EQ-DROP-COVER", ("earthquake",), lambda p, h: set(p["people"]) - set(wheelchair_users(p)),
          "When shaking starts: Drop, Cover, and Hold On until it stops.",
          "READY-EARTHQUAKE", WHEN_DURING, 3,
          never_do=("stand in a doorway", "run outside")),
-    Rule("EQ-LOCK-COVER", ("earthquake",), lambda p, h: uses_wheelchair(p),
+    Rule("EQ-LOCK-COVER", ("earthquake",), always,
          "When shaking starts: Lock your wheels, Cover your head and neck with your arms, and Hold On "
          "until it stops.",
          "READY-EARTHQUAKE", WHEN_DURING, 2,
-         never_do=("stand in a doorway", "run outside")),
+         never_do=("stand in a doorway", "run outside"),
+         needs=WHEELCHAIR_TAGS),
     Rule("EQ-SECURE", ("earthquake",), always,
          "Secure heavy furniture, shelves and TVs to the wall so they cannot fall on you.",
          "READY-EARTHQUAKE", WHEN_NOW, 4),
@@ -706,6 +738,102 @@ def evaluate(risks, profile) -> dict:
         "gaps": gaps,
         "sources": [SOURCES[sid] for sid in _unique(r.source_id for r in fired)],
     }
+
+
+# --------------------------------------------------------------------------
+# Follow-up questions: the rules pick them, so they always matter for this plan
+# --------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Question:
+    text: str
+    helper: str
+    options: dict  # answer label -> value stored in the profile (None = not sure, leave unknown)
+
+
+YES_NO = {"Yes": True, "No": False, "Not sure": None}
+
+QUESTIONS: dict[str, Question] = {
+    "has_backup_power": Question(
+        "If the power goes out, do you have backup power for medical equipment or a wheelchair?",
+        "For example a generator, spare batteries or a power bank.", YES_NO),
+    "helper_nearby": Question(
+        "Is someone nearby able to help you leave or check on you in an emergency?",
+        "A neighbour, friend or family member who lives close by.",
+        {"Yes": True, "Not yet": False, "Not sure": None}),
+    "drives": Question(
+        "Does someone in your home drive, with a car you could leave in?",
+        "This tells us whether you need help to evacuate.", YES_NO),
+    "has_ac": Question(
+        "Do you have air conditioning at home?",
+        "Heat is one of the main risks where you live.", YES_NO),
+}
+WHEELCHAIR_TYPE = {"Powered (needs charging)": True, "Manual": False, "Not sure": None}
+
+
+def _wheelchair_question(who: str) -> dict:
+    whose = "your" if who == "you" else f"{who}'s"
+    return {"id": f"powered_wheelchair:{who}",
+            "question": f"Is {whose} wheelchair powered or manual?",
+            "helper": "A powered wheelchair needs a plan for charging when the power is out.",
+            "options": list(WHEELCHAIR_TYPE)}
+
+
+def open_questions(risks, profile, limit: int = 2) -> list[dict]:
+    """The follow-up questions whose answers would change this household's plan the most.
+
+    Returns [{"id", "question", "helper", "options": [labels]}], at most `limit`, most important
+    first. Only asks about facts that are still unknown. Answers go back in via apply_answers().
+    """
+    p = normalize_profile(profile)
+    picked: list[dict] = []
+    # Wheelchair type first: it decides whether the backup-power rules apply at all.
+    for who in p["needs"].get("wheelchair", []):
+        if who != "you" or p["mobility"] == "wheelchair":  # "you" + manual_wheelchair is already known
+            picked.append(_wheelchair_question(who))
+    # Then the unknown facts behind the most urgent gaps (gaps come back ranked).
+    rules_by_id = {r.id: r for r in RULES}
+    asked: set[str] = set()
+    for gap in evaluate(risks, profile)["gaps"]:
+        for field in rules_by_id[gap["rule_id"]].gap.asks:
+            if p[field] is None and field not in asked:
+                asked.add(field)
+                q = QUESTIONS[field]
+                picked.append({"id": field, "question": q.text, "helper": q.helper, "options": list(q.options)})
+    return picked[:limit]
+
+
+def apply_answers(profile, answers: dict) -> dict:
+    """Write follow-up answers ({question id: chosen label}) into a copy of the profile.
+
+    Works on Module 2's nested profile and on the flat one. "Not sure", "Not answered" and
+    unknown ids leave the profile unchanged.
+    """
+    out = copy.deepcopy(profile.model_dump() if hasattr(profile, "model_dump") else dict(profile or {}))
+    nested = isinstance(out.get("home"), dict) or isinstance(out.get("mobility"), dict)
+    for qid, label in (answers or {}).items():
+        if qid.startswith("powered_wheelchair:"):
+            powered = WHEELCHAIR_TYPE.get(label)
+            if powered is None:
+                continue
+            who = qid.split(":", 1)[1]
+            if who == "you":
+                if nested:
+                    out.setdefault("mobility", {})["wheelchair_type"] = "powered" if powered else "manual"
+                else:
+                    out["mobility"] = "powered_wheelchair" if powered else "manual_wheelchair"
+            elif powered:
+                for member in out.get("others") or []:
+                    if isinstance(member, dict) and str(member.get("who", "")).strip() == who:
+                        member["needs"] = ["powered_wheelchair" if t == "wheelchair" else t
+                                           for t in member.get("needs") or []]
+            continue
+        question = QUESTIONS.get(qid)
+        if question is None or question.options.get(label) is None:
+            continue
+        key = "has_car" if (qid == "drives" and nested) else qid
+        out[key] = question.options[label]
+    return out
 
 
 def main(argv: list[str]) -> int:
